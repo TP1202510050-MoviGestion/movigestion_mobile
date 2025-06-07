@@ -1,5 +1,5 @@
 class AppConstants {
-  static const String baseUrl = 'https://app-241107014459.azurewebsites.net';
+  static const String baseUrl = 'http://localhost:8080';
 
   // Rutas de API
   static const String profile = '/api/profiles';

@@ -97,8 +97,4 @@ class ShipmentService {
       return false;
     }
   }
-
-
-
-
 }
