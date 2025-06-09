@@ -1,14 +1,16 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:movigestion_mobile/core/app_constants.dart';
 import 'package:http/http.dart' as http;
+import 'package:movigestion_mobile/core/app_constants.dart';
+import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_model.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_service.dart';
+import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/carrier_profiles/carrier_profiles.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/profile/profile_screen.dart';
+import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/reports/report_detail_screen.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/shipments/shipments_screen.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/vehicle/vehicles_screen.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/carrier_profiles/carrier_profiles.dart';
 
 class ReportsScreen extends StatefulWidget {
   final String name;
@@ -24,35 +26,267 @@ class ReportsScreen extends StatefulWidget {
   _ReportsScreenState createState() => _ReportsScreenState();
 }
 
-class _ReportsScreenState extends State<ReportsScreen> {
-  List<ReportModel> _reports = [];
+class _ReportsScreenState extends State<ReportsScreen>
+    with SingleTickerProviderStateMixin {
+  final ReportService _reportService = ReportService();
+  final ProfileService _profileService = ProfileService();
+
+  late AnimationController _anim;
+  late Animation<double> _fade;
+
   bool _isLoading = true;
+  List<ReportModel> _all = [];
+  List<ReportModel> _filtered = [];
+
+  // Datos de la empresa del gerente
+  String _companyName = '';
+  String _companyRuc  = '';
+
+  // filtros
+  String? _filterType;
+  String? _filterStatus;
+  String  _sortOrder = 'Recientes';
+
+  List<String> get _types {
+    final s = _all.map((r) => r.type).toSet().toList();
+    s.sort();
+    return s;
+  }
+  final List<String> _statuses    = ['Pendiente', 'En Proceso', 'Resuelto'];
+  final List<String> _dateOptions = ['Recientes', 'Antiguos'];
 
   @override
   void initState() {
     super.initState();
-    _fetchReports();
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _fade = CurvedAnimation(parent: _anim, curve: Curves.easeInOut);
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    setState(() => _isLoading = true);
+    await _fetchManagerData();
+    await _fetchReports();
+    setState(() => _isLoading = false);
+    _anim.forward();
+  }
+
+  Future<void> _fetchManagerData() async {
+    try {
+      final res = await http.get(Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}'));
+      if (res.statusCode == 200) {
+        final list = json.decode(res.body) as List;
+        final gerente = list.firstWhere(
+              (e) =>
+          e['name'].toString().toLowerCase()     == widget.name.toLowerCase() &&
+              e['lastName'].toString().toLowerCase() == widget.lastName.toLowerCase(),
+          orElse: () => null,
+        );
+        if (gerente != null) {
+          _companyName = gerente['companyName'] ?? '';
+          _companyRuc  = gerente['companyRuc']  ?? '';
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchReports() async {
     try {
-      final reportService = ReportService();
-      final reports = await reportService.getAllReports();
-      setState(() {
-        _reports = reports;
-        _isLoading = false;
-      });
+      final all = await _reportService.getAllReports();
+      // Filtramos solo los de la misma empresa:
+      _all = all.where((r) =>
+      r.companyName == _companyName &&
+          r.companyRuc  == _companyRuc
+      ).toList();
+      _applyFilters();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al cargar reportes: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
+        SnackBar(content: Text('Error al cargar reportes: $e')),
       );
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _filtered = []);
     }
+  }
+
+  void _applyFilters() {
+    var list = List<ReportModel>.from(_all);
+    if (_filterType   != null) list = list.where((r) => r.type   == _filterType).toList();
+    if (_filterStatus != null) list = list.where((r) => r.status == _filterStatus).toList();
+    list.sort((a, b) {
+      final cmp = a.createdAt.compareTo(b.createdAt);
+      return _sortOrder == 'Recientes' ? -cmp : cmp;
+    });
+    setState(() => _filtered = list);
+  }
+
+  void _showFilterModal() {
+    String? tmpType    = _filterType;
+    String? tmpStatus  = _filterStatus;
+    String  tmpOrder   = _sortOrder;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        maxChildSize: 0.8,
+        builder: (c, scroll) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF2C2F38),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: ListView(
+            controller: scroll,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                'Filtrar por...',
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+
+              // Tipo
+              const Text('Tipo', style: TextStyle(color: Colors.white70)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8, runSpacing: 8,
+                children: [null, ..._types].map((t) {
+                  return ChoiceChip(
+                    label: Text(t ?? 'Todos'),
+                    selected: tmpType == t,
+                    onSelected: (_) => setState(() => tmpType = t),
+                    selectedColor: Colors.amber,
+                    backgroundColor: Colors.white10,
+                    labelStyle: TextStyle(color: tmpType == t ? Colors.black : Colors.grey),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+
+              // Estado
+              const Text('Estado', style: TextStyle(color: Colors.white70)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8, runSpacing: 8,
+                children: [null, ..._statuses].map((s) {
+                  return ChoiceChip(
+                    label: Text(s ?? 'Todos'),
+                    selected: tmpStatus == s,
+                    onSelected: (_) => setState(() => tmpStatus = s),
+                    selectedColor: Colors.amber,
+                    backgroundColor: Colors.white10,
+                    labelStyle: TextStyle(color: tmpStatus == s ? Colors.black : Colors.grey),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+
+              // Fecha
+              const Text('Ordenar por fecha', style: TextStyle(color: Colors.white70)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: _dateOptions.map((o) {
+                  return ChoiceChip(
+                    label: Text(o),
+                    selected: tmpOrder == o,
+                    onSelected: (_) => setState(() => tmpOrder = o),
+                    selectedColor: Colors.amber,
+                    backgroundColor: Colors.white10,
+                    labelStyle: TextStyle(color: tmpOrder == o ? Colors.black : Colors.grey),
+                  );
+                }).toList(),
+              ),
+
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: () {
+                  _filterType   = tmpType;
+                  _filterStatus = tmpStatus;
+                  _sortOrder    = tmpOrder;
+                  _applyFilters();
+                  Navigator.pop(context);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber,
+                  minimumSize: const Size.fromHeight(50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Aplicar filtros', style: TextStyle(color: Colors.black, fontSize: 16)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard(ReportModel r) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(colors: [Colors.amber.shade400, Colors.amber.shade700]),
+              ),
+              padding: const EdgeInsets.all(8),
+              child: const Icon(Icons.report, color: Colors.black),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(r.driverName,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(r.type, style: const TextStyle(fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today, size: 14, color: Colors.black54),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${r.createdAt.toLocal()}'.split('.')[0],
+                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(r.status, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -62,7 +296,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         backgroundColor: const Color(0xFF2C2F38),
         title: Row(
           children: [
-            Icon(Icons.report, color: Colors.amber),
+            const Icon(Icons.report, color: Colors.amber),
             const SizedBox(width: 10),
             Text(
               'Reportes',
@@ -70,234 +304,94 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_list, color: Colors.white),
+            onPressed: _showFilterModal,
+          )
+        ],
       ),
       backgroundColor: const Color(0xFF1E1F24),
       drawer: _buildDrawer(context),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Color(0xFFEA8E00)))
-            : _reports.isEmpty
-            ? const Center(
-          child: Text(
-            'No hay reportes disponibles',
-            style: TextStyle(color: Colors.white70),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.amber, strokeWidth: 3))
+          : _filtered.isEmpty
+          ? const Center(
+        child: Text(
+          'No hay reportes disponibles',
+          style: TextStyle(color: Colors.white70),
+        ),
+      )
+          : FadeTransition(
+        opacity: _fade,
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: _filtered.length,
+          itemBuilder: (ctx, i) => InkWell(
+            onTap: () async {
+              final changed = await Navigator.push(
+                ctx,
+                MaterialPageRoute(
+                  builder: (_) => ReportDetailScreen(name: widget.name, lastName: widget.lastName,report: _filtered[i]),
+                ),
+              );
+              // si eliminó o resolvió, refrescamos la lista
+              if (changed == true) _fetchReports();
+            },
+            child: _buildCard(_filtered[i]),
           ),
-        )
-            : ListView.builder(
-          itemCount: _reports.length,
-          itemBuilder: (context, index) {
-            final report = _reports[index];
-            return _buildReportCard(report);
-          },
         ),
       ),
     );
   }
 
-  Widget _buildReportCard(ReportModel report) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFFFF),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
+  Drawer _buildDrawer(BuildContext ctx) => Drawer(
+    backgroundColor: const Color(0xFF2C2F38),
+    child: ListView(padding: EdgeInsets.zero, children: [
+      DrawerHeader(
+        child: Column(
           children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: const Color(0xFFEA8E00),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: Image.asset(
-                  'assets/images/bell.png', // Usa 'assets/images/bell.png'
-                  fit: BoxFit.cover,
-                  width: 40,
-                  height: 40,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Tipo: ${report.type}',
-                    style: const TextStyle(color: Colors.black),
-                  ),
-                  Text(
-                    'Descripción: ${report.description}',
-                    style: const TextStyle(color: Colors.black),
-                  ),
-                  Text(
-                    'Conductor: ${report.driverName}',
-                    style: const TextStyle(color: Colors.black54),
-                  ),
-                  Text(
-                    'Fecha: ${report.createdAt}',
-                    style: const TextStyle(color: Colors.black54),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.check_circle, color: Colors.green),
-                  tooltip: 'Marcar como atendido',
-                  onPressed: () {
-                    _markReportAsHandled(report);
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.phone, color: Colors.blue),
-                  tooltip: 'Llamar a Emergencias',
-                  onPressed: _callEmergencyNumber,
-                ),
-              ],
+            Image.asset('assets/images/login_logo.png', height: 100),
+            const SizedBox(height: 10),
+            Text(
+              '${widget.name} ${widget.lastName} - Gerente',
+              style: const TextStyle(color: Colors.grey, fontSize: 16),
             ),
           ],
         ),
       ),
-    );
-  }
-  void _markReportAsHandled(ReportModel report) async {
-    if (report.id == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se puede eliminar el reporte porque el ID es nulo.'),
-          backgroundColor: Colors.redAccent,
+      _drawerItem(Icons.person, 'PERFIL',
+              () => Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
+              ProfileScreen(name: widget.name, lastName: widget.lastName)))),
+      _drawerItem(Icons.people, 'TRANSPORTISTAS',
+              () => Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
+              CarrierProfilesScreen(name: widget.name, lastName: widget.lastName)))),
+      _drawerItem(Icons.report, 'REPORTES',
+              () => Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
+              ReportsScreen(name: widget.name, lastName: widget.lastName)))),
+      _drawerItem(Icons.directions_car, 'VEHÍCULOS',
+              () => Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
+              VehiclesScreen(name: widget.name, lastName: widget.lastName)))),
+      _drawerItem(Icons.local_shipping, 'ENVIOS',
+              () => Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
+              ShipmentsScreen(name: widget.name, lastName: widget.lastName)))),
+      const SizedBox(height: 160),
+      ListTile(
+        leading: const Icon(Icons.logout, color: Colors.white),
+        title: const Text('CERRAR SESIÓN', style: TextStyle(color: Colors.white)),
+        onTap: () => Navigator.pushAndRemoveUntil(
+          ctx,
+          MaterialPageRoute(builder: (_) => LoginScreen(onLoginClicked: (_, __) {}, onRegisterClicked: () {})),
+              (route) => false,
         ),
-      );
-      return;
-    }
-
-    final url = Uri.parse('${AppConstants.baseUrl}${AppConstants.report}/${report.id}');
-    try {
-      final response = await http.delete(url);
-
-      if (response.statusCode == 200 || response.statusCode == 204) {
-        setState(() {
-          _reports.removeWhere((r) => r.id == report.id);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Reporte eliminado exitosamente'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al eliminar el reporte. Código: ${response.statusCode}'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al eliminar el reporte: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    }
-  }
-
-
-  void _callEmergencyNumber() async {
-    const emergencyNumber = '105';
-    final Uri url = Uri(scheme: 'tel', path: emergencyNumber);
-
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se puede realizar la llamada.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    }
-  }
-
-
-  Widget _buildDrawer(BuildContext context) {
-    return Drawer(
-      backgroundColor: const Color(0xFF2C2F38),
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          DrawerHeader(
-
-            child: Column(
-              children: [
-                Image.asset(
-                  'assets/images/login_logo.png',
-                  height: 100,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '${widget.name} ${widget.lastName} - Gerente',
-                  style: const TextStyle(color: Colors.grey,  fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-          _buildDrawerItem(Icons.person, 'PERFIL', ProfileScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.people, 'TRANSPORTISTAS', CarrierProfilesScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.report, 'REPORTES', ReportsScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.directions_car, 'VEHÍCULOS', VehiclesScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.local_shipping, 'ENVIOS', ShipmentsScreen(name: widget.name, lastName: widget.lastName)),
-          const SizedBox(height: 160),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.white),
-            title: const Text('CERRAR SESIÓN', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => LoginScreen(
-                    onLoginClicked: (username, password) {
-                      print('Usuario: $username, Contraseña: $password');
-                    },
-                    onRegisterClicked: () {
-                      print('Registrarse');
-                    },
-                  ),
-                ),
-                    (Route<dynamic> route) => false,
-              );
-            },
-          ),
-        ],
       ),
-    );
-  }
+    ]),
+  );
 
-  Widget _buildDrawerItem(IconData icon, String title, Widget page) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(title, style: const TextStyle(color: Colors.white)),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => page),
-        );
-      },
-    );
-  }
+  Widget _drawerItem(IconData icon, String title, VoidCallback onTap) =>
+      ListTile(
+        leading: Icon(icon, color: Colors.white),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        onTap: onTap,
+      );
 }

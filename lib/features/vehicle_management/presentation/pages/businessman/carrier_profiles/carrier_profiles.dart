@@ -68,7 +68,8 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
           'name'    : e['name'],
           'lastName': e['lastName'],
           'email'   : e['email'],
-          'phone'   : e['phone'] ?? ''
+          'phone'   : e['phone'] ?? '',
+        'profilePhoto' : e['profilePhoto'] ?? ''
         })
             .toList();
       }
@@ -100,7 +101,7 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
           itemCount: _carriers.length,
           itemBuilder: (_, i) {
             final p = _carriers[i];
-            return _card(p['id'], p['name'], p['lastName'], p['email'], p['phone']);
+            return _card(p['id'], p['name'], p['lastName'], p['email'], p['phone'], p['profilePhoto'],);
           }),
     );
   }
@@ -112,12 +113,22 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
     ),
   );
 
-  Widget _card(int id, String name, String lastName, String mail, String phone) {
+  Widget _card(int id, String name, String lastName, String mail, String phone, String photoB64) {
+    ImageProvider avatar;
+    if (photoB64.isNotEmpty) {
+      avatar = MemoryImage(base64Decode(photoB64));
+    } else {
+      avatar = const AssetImage('assets/images/driver.png');
+    }
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ListTile(
-        leading : const CircleAvatar(backgroundImage: AssetImage('assets/images/driver.png')),
+        leading: CircleAvatar(
+          backgroundImage: avatar,
+          radius: 24,
+          backgroundColor: Colors.grey[200],
+        ),
         title   : Text('$name $lastName'),
         subtitle: Text('📧 $mail\n📱 $phone'),
         isThreeLine: true,

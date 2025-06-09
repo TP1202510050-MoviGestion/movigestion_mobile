@@ -6,19 +6,16 @@ class ReportRepository {
 
   ReportRepository({required this.reportService});
 
-  Future<List<ReportModel>> getAllReports() async {
-    return await reportService.getAllReports();
-  }
+  Future<List<ReportModel>> getAllReports() => reportService.getAllReports();
 
-  Future<ReportModel?> getReportById(int id) async {
-    return await reportService.getReportById(id);
-  }
+  Future<ReportModel?> getReportById(int id) => reportService.getReportById(id);
 
-  Future<bool> createReport(ReportModel report) async {
-    return await reportService.createReport(report);
-  }
+  Future<bool> createReport(ReportModel report) => reportService.createReport(report);
 
-  Future<bool> deleteReport(int id) async {
-    return await reportService.deleteReport(id);
-  }
+  Future<bool> updateReport(ReportModel report) => reportService.updateReport(report);
+
+  Future<bool> updateReportStatus(int id, String status) =>
+      reportService.updateReportStatus(id, status);
+
+  Future<bool> deleteReport(int id) => reportService.deleteReport(id);
 }

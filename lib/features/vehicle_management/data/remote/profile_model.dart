@@ -4,8 +4,6 @@ class ProfileModel {
   final String lastName;
   final String email;
   final String type;
-
-
   final String? phone;         // Puede ser nulo si backend aún no lo envía
   final String? companyName;
   final String? companyRuc;
@@ -25,29 +23,37 @@ class ProfileModel {
 
   factory ProfileModel.fromJson(Map<String, dynamic> json) {
     return ProfileModel(
-      id: json['id'],
-      name: json['name'],
-      lastName: json['lastName'],
-      email: json['email'],
-      type: json['type'],
-      phone: json['phone'],
-      companyName: json['companyName'],
-      companyRuc: json['companyRuc'],
-      profilePhoto: json['profilePhoto'],
+      id: json['id'] as int,
+      name: json['name'] as String,
+      lastName: json['lastName'] as String,
+      email: json['email'] as String,
+      type: json['type'] as String,
+      phone: json['phone'] as String?,
+      companyName: json['companyName'] as String?,
+      companyRuc: json['companyRuc'] as String?,
+      profilePhoto: json['profilePhoto'] as String?,
     );
   }
 
-  Map<String, dynamic> toJson() {
+  /// Para el PUT general (/api/profiles/{id})
+  Map<String, dynamic> toUpdateJson() {
     return {
-      'id'          : id,
       'name'        : name,
       'lastName'    : lastName,
       'email'       : email,
-      'type'        : type,
-      'phone'       : phone,
-      'companyName' : companyName,
-      'companyRuc'  : companyRuc,
-      'profilePhoto': profilePhoto,
+      'phone'       : phone ?? '',
+      'companyName' : companyName ?? '',
+      'companyRuc'  : companyRuc ?? '',
+      'profilePhoto': profilePhoto ?? '',
+    };
+  }
+
+  /// Para el PATCH de contraseña
+  Map<String, dynamic> toChangePasswordJson(String oldPassword, String newPassword) {
+    return {
+      'email'      : email,
+      'oldPassword': oldPassword,
+      'newPassword': newPassword,
     };
   }
 }

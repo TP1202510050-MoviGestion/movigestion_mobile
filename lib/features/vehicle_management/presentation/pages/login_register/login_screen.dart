@@ -120,7 +120,7 @@ class LoginScreen extends StatelessWidget {
       onPressed: () async {
         if (usernameController.text.isNotEmpty && passwordController.text.isNotEmpty) {
           try {
-            final profile = await profileRepository.getProfileByEmailAndPassword(
+            final profile = await profileRepository.login(
               usernameController.text,
               passwordController.text,
             );

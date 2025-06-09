@@ -6,7 +6,23 @@ class ProfileRepository {
 
   ProfileRepository({required this.profileService});
 
-  Future<ProfileModel?> getProfileByEmailAndPassword(String email, String password) async {
-    return await profileService.getProfileByEmailAndPassword(email, password);
+  Future<ProfileModel?> login(String email, String password) {
+    return profileService.getProfileByEmailAndPassword(email, password);
+  }
+
+  Future<ProfileModel?> findByNameAndLastName(String name, String lastName) {
+    return profileService.getProfileByNameAndLastName(name, lastName);
+  }
+
+  Future<bool> update(ProfileModel profile) {
+    return profileService.updateProfile(profile);
+  }
+
+  Future<bool> changePassword(
+      String email,
+      String oldPassword,
+      String newPassword,
+      ) {
+    return profileService.changePassword(email, oldPassword, newPassword);
   }
 }
