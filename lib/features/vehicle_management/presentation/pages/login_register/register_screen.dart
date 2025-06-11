@@ -10,46 +10,43 @@ class RegisterScreen extends StatefulWidget {
   _RegisterScreenState createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProviderStateMixin {
-  String _selectedRole = '';
-  late AnimationController _animationController;
-  late Animation<double> _buttonScaleAnimation;
 
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _buttonScaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-  }
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  String _selectedRole = '';
 
   void _onRoleSelected(String role) {
-    setState(() {
-      _selectedRole = role;
-    });
-    _animationController.forward().then((_) => _animationController.reverse());
-  }
+    setState(() => _selectedRole = role);
 
-  void _navigateToUserRegistration() {
-    if (_selectedRole.isNotEmpty) {
+    if (role == 'Gerente') {
+      // Navega inmediatamente
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => UserRegistrationScreen(
-            selectedRole: _selectedRole,
-          ),
+          builder: (_) => UserRegistrationScreen(selectedRole: 'Gerente'),
         ),
       );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor selecciona un rol'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.redAccent,
+    } else if (role == 'Transportista') {
+      // Muestra diálogo informativo
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF2C2F38),
+          title: const Text(
+            '¡Hola Transportista!',
+            style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            'Tu cuenta debe ser creada por el administrador de tu empresa. '
+                'Por favor, ponte en contacto con tu gerente para que te proporcione acceso.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Entendido', style: TextStyle(color: Colors.amber)),
+              onPressed: () => Navigator.pop(context),
+            )
+          ],
         ),
       );
     }
@@ -58,67 +55,80 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1E1F24), // Fondo oscuro moderno
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const SizedBox(height: 60),
-            Image.asset(
-              'assets/images/login_logo.png',
-              height: 120,
-            ),
-            const SizedBox(height: 40),
-            _buildRoleButton('Gerente'),
-            const SizedBox(height: 16),
-            _buildRoleButton('Transportista'),
-            const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: _navigateToUserRegistration,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFA000),
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
-                ),
+      backgroundColor: const Color(0xFF1E1F24),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              Image.asset('assets/images/login_logo.png', height: 100),
+              const SizedBox(height: 32),
+              const Text(
+                'Regístrate como',
+                style: TextStyle(color: Colors.white70, fontSize: 18),
               ),
-              child: const Text(
-                'Siguiente',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+              const SizedBox(height: 16),
+              _roleCard(
+                icon: Icons.admin_panel_settings,
+                label: 'Gerente',
+                selected: _selectedRole == 'Gerente',
+                onTap: () => _onRoleSelected('Gerente'),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              _roleCard(
+                icon: Icons.local_shipping,
+                label: 'Transportista',
+                selected: _selectedRole == 'Transportista',
+                onTap: () => _onRoleSelected('Transportista'),
+              ),
+              const Spacer(),
+              const Text(
+                'Selecciona tu rol para continuar',
+                style: TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildRoleButton(String role) {
-    return ScaleTransition(
-      scale: _selectedRole == role ? _buttonScaleAnimation : const AlwaysStoppedAnimation(1.0),
-      child: ElevatedButton(
-        onPressed: () => _onRoleSelected(role),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _selectedRole == role ? Colors.orangeAccent : const Color(0xFF2F353F),
-          foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 50),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-          shadowColor: _selectedRole == role ? Colors.orange : Colors.transparent,
-          elevation: _selectedRole == role ? 8 : 2,
+  Widget _roleCard({
+    required IconData icon,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFFFA000) : const Color(0xFF2F353F),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: selected
+              ? [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 4))]
+              : [],
         ),
-        child: Text(
-          role.toUpperCase(),
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: _selectedRole == role ? Colors.black : Colors.white70,
-          ),
+        child: Row(
+          children: [
+            Icon(icon, size: 32, color: selected ? Colors.black : Colors.white70),
+            const SizedBox(width: 20),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: selected ? Colors.black : Colors.white70,
+              ),
+            ),
+            const Spacer(),
+            if (selected)
+              const Icon(Icons.check_circle, color: Colors.black, size: 28),
+          ],
         ),
       ),
     );

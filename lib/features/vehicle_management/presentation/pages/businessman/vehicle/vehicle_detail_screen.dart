@@ -1,470 +1,337 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import 'package:intl/intl.dart';
-import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehicle_service.dart';
-import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehicle_model.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/profile/profile_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/shipments/shipments_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/vehicle/vehicles_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/reports/reports_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/carrier_profiles/carrier_profiles.dart';
-import 'dart:convert';
+
+
+import '../../../../data/remote/vehicle_model.dart';
+import '../../../../data/remote/vehicle_service.dart';
+import '../profile/profile_screen.dart';
+import '../carrier_profiles/carrier_profiles.dart';
+import '../reports/reports_screen.dart';
+import '../vehicle/vehicles_screen.dart';
+import '../shipments/shipments_screen.dart';
+import '../../login_register/login_screen.dart';
+
+const _kBg          = Color(0xFF1E1F24);
+const _kCard        = Color(0xFF2F353F);
+const _kBar         = Color(0xFF2C2F38);
+const _kAction      = Color(0xFFEA8E00);
+const _kTextMain    = Colors.white;
+const _kTextSub     = Colors.white70;
+const _kRadius      = 12.0;
 
 class VehicleDetailScreen extends StatefulWidget {
   final VehicleModel vehicle;
-  final String name;
-  final String lastName;
+  final String name, lastName;
 
   const VehicleDetailScreen({
-    Key? key,
+    super.key,
     required this.vehicle,
     required this.name,
     required this.lastName,
-  }) : super(key: key);
+  });
 
   @override
-  _VehicleDetailScreenState createState() => _VehicleDetailScreenState();
+  State<VehicleDetailScreen> createState() => _VehicleDetailScreenState();
 }
 
-class _VehicleDetailScreenState extends State<VehicleDetailScreen> with SingleTickerProviderStateMixin {
-  late TextEditingController licensePlateController;
-  late TextEditingController modelController;
-  late double engineValue;
-  late double fuelValue;
-  late double tiresValue;
-  late double electricalSystemValue;
-  late double transmissionTempValue;
-  late TextEditingController driverNameController;
-  late TextEditingController colorController;
-  late TextEditingController lastTechnicalInspectionDateController;
-  File? _selectedImage;
+class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
+  /* ───────────────── controllers / services ───────────────── */
+  late final _plateC  = TextEditingController(text: v.licensePlate);
+  late final _brandC  = TextEditingController(text: v.brand);
+  late final _modelC  = TextEditingController(text: v.model);
+  late final _yearC   = TextEditingController(text: v.year.toString());
+  late final _colorC  = TextEditingController(text: v.color);
+  late final _seatC   = TextEditingController(text: v.seatingCapacity.toString());
+  late final _statusC = TextEditingController(text: v.status);
+  late final _gpsC    = TextEditingController(text: v.gpsSensorId);
+  late final _speedC  = TextEditingController(text: v.speedSensorId);
+  late final _driverC = TextEditingController(text: v.driverName);
+  late final _inspC   = TextEditingController(text: _fmt.format(v.lastTechnicalInspectionDate));
 
-  final ImagePicker _picker = ImagePicker();
-  final VehicleService vehicleService = VehicleService();
-  late AnimationController _animationController;
+  final _formKey     = GlobalKey<FormState>();
+  final _fmt         = DateFormat('yyyy-MM-dd');
+  final _picker      = ImagePicker();
+  final _svc         = VehicleService();
 
-  @override
-  void initState() {
-    super.initState();
-    licensePlateController = TextEditingController(text: widget.vehicle.licensePlate);
-    modelController = TextEditingController(text: widget.vehicle.model);
-    engineValue = widget.vehicle.engine.toDouble();
-    fuelValue = widget.vehicle.fuel.toDouble();
-    tiresValue = widget.vehicle.tires.toDouble();
-    electricalSystemValue = widget.vehicle.electricalSystem.toDouble();
-    transmissionTempValue = widget.vehicle.transmissionTemperature.toDouble();
-    driverNameController = TextEditingController(text: widget.vehicle.driverName);
-    colorController = TextEditingController(text: widget.vehicle.color);
-    lastTechnicalInspectionDateController = TextEditingController(
-      text: DateFormat('yyyy-MM-dd').format(widget.vehicle.lastTechnicalInspectionDate),
-    );
+  File? _pickedImg, _pickedSoat, _pickedCard;
 
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
+  VehicleModel get v => widget.vehicle;
+
+  /* ───────────────────── helpers ───────────────────── */
+  ImageProvider? _thumbnail(String raw) {
+    if (raw.trim().isEmpty) return null;
+    final uri = Uri.tryParse(raw);
+    if (uri != null && uri.hasScheme) return NetworkImage(raw);
+    try   { return MemoryImage(base64Decode(base64.normalize(raw))); }
+    catch (_) { return null; }
   }
 
-  Future<void> _pickImage() async {
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _selectedImage = File(pickedFile.path);
-      });
-      _animationController.forward();
-    }
-  }
-
-  Future<void> _updateVehicle() async {
-    try {
-      VehicleModel updatedVehicle = VehicleModel(
-        id: widget.vehicle.id,
-        userId: widget.vehicle.userId,
-        licensePlate: licensePlateController.text,
-        model: modelController.text,
-        engine: engineValue.toInt(),
-        fuel: fuelValue.toInt(),
-        tires: tiresValue.toInt(),
-        electricalSystem: electricalSystemValue.toInt(),
-        transmissionTemperature: transmissionTempValue.toInt(),
-        driverName: driverNameController.text,
-        vehicleImage: _selectedImage != null ? _encodeImageToBase64(_selectedImage!) : widget.vehicle.vehicleImage,
-        color: colorController.text,
-        lastTechnicalInspectionDate: DateFormat('yyyy-MM-dd').parse(lastTechnicalInspectionDateController.text),
-        createdAt: widget.vehicle.createdAt,
-      );
-
-      bool success = await vehicleService.updateVehicle(widget.vehicle.id, updatedVehicle);
-      if (success) {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (_, __, ___) => VehiclesScreen(
-              name: widget.name,
-              lastName: widget.lastName,
-            ),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(
-                opacity: animation,
-                child: child,
-              );
-            },
-          ),
-        );
-      } else {
-        _showSnackbar('Error al actualizar el vehículo');
-      }
-    } catch (error) {
-      _showSnackbar('Error al actualizar el vehículo: $error');
-    }
-  }
-
-  void _showSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(color: Colors.white),
+  Future<void> _pickDate(TextEditingController c) async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: DateTime.tryParse(c.text) ?? DateTime.now(),
+      firstDate : DateTime(2000),
+      lastDate  : DateTime(2100),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.dark(
+              primary: _kAction, surface: _kCard,
+              onSurface: _kTextMain, onPrimary: _kTextMain),
         ),
-        backgroundColor: Colors.redAccent,
+        child: child!,
       ),
     );
+    if (d != null) c.text = _fmt.format(d);
   }
 
-  String _encodeImageToBase64(File image) {
-    List<int> imageBytes = image.readAsBytesSync();
-    return base64Encode(imageBytes);
+  Future<File?> _pickFile() async {
+    final x = await _picker.pickImage(source: ImageSource.gallery);
+    return x != null ? File(x.path) : null;
   }
 
+  InputDecoration _dec(String lbl, {bool date = false}) => InputDecoration(
+    labelText: lbl,
+    labelStyle: const TextStyle(color: _kTextSub),
+    filled: true,
+    fillColor: _kCard,
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(_kRadius)),
+    suffixIcon: date
+        ? IconButton(
+      icon: const Icon(Icons.calendar_today, color: _kAction),
+      onPressed: () => _pickDate(_inspC),
+    )
+        : null,
+  );
+
+  /* ────────────────── persistencia ────────────────── */
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final updated = v.copyWith(
+      licensePlate : _plateC.text.trim(),
+      brand        : _brandC.text.trim(),
+      model        : _modelC.text.trim(),
+      year         : int.tryParse(_yearC.text.trim()) ?? v.year,
+      color        : _colorC.text.trim(),
+      seatingCapacity: int.tryParse(_seatC.text.trim()) ?? v.seatingCapacity,
+      status       : _statusC.text.trim(),
+      gpsSensorId  : _gpsC.text.trim(),
+      speedSensorId: _speedC.text.trim(),
+      driverName   : _driverC.text.trim(),
+      lastTechnicalInspectionDate: _fmt.parse(_inspC.text),
+      vehicleImage : _pickedImg  != null ? base64Encode(_pickedImg!.readAsBytesSync())  : v.vehicleImage,
+      documentSoat : _pickedSoat != null ? base64Encode(_pickedSoat!.readAsBytesSync()) : v.documentSoat,
+      documentVehicleOwnershipCard: _pickedCard != null ? base64Encode(_pickedCard!.readAsBytesSync()) : v.documentVehicleOwnershipCard,
+    );
+
+    final ok = await _svc.updateVehicle(v.id!, updated);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: ok ? Colors.green : Colors.redAccent,
+        content: Text(ok ? 'Vehículo actualizado' : 'Error al guardar'),
+      ),
+    );
+    if (ok) Navigator.pop(context, updated);
+  }
+
+  /* ────────────────────── UI ────────────────────── */
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _kBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2C2F38),
-        title: const Text(
-          'Detalle del Vehículo',
-          style: TextStyle(color: Colors.grey),
-        ),
-        elevation: 0,
+        backgroundColor: _kBar,
+        title: const Text('Detalle del Vehículo', style: TextStyle(color: _kTextMain)),
       ),
-      backgroundColor: const Color(0xFF1E1F24),
       drawer: _buildDrawer(),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 500),
-              child: _selectedImage != null
-                  ? _buildVehicleImage(_selectedImage!)
-                  : widget.vehicle.vehicleImage.isNotEmpty
-                  ? _buildVehicleNetworkImage(widget.vehicle.vehicleImage)
-                  : _buildNoImagePlaceholder(),
-            ),
-            const SizedBox(height: 20),
-            _buildSectionContainer(_buildTextField('Placa', licensePlateController)),
-            _buildSectionContainer(_buildTextField('Modelo', modelController)),
-            _buildSectionContainer(_buildSliderField('Motor (%)', engineValue, (value) {
-              setState(() {
-                engineValue = value;
-              });
-            })),
-            _buildSectionContainer(_buildSliderField('Combustible (%)', fuelValue, (value) {
-              setState(() {
-                fuelValue = value;
-              });
-            })),
-            _buildSectionContainer(_buildSliderField('Neumáticos (%)', tiresValue, (value) {
-              setState(() {
-                tiresValue = value;
-              });
-            })),
-            _buildSectionContainer(_buildSliderField('Sistema Eléctrico (%)', electricalSystemValue, (value) {
-              setState(() {
-                electricalSystemValue = value;
-              });
-            })),
-            _buildSectionContainer(_buildSliderField('Temperatura de Transmisión (%)', transmissionTempValue, (value) {
-              setState(() {
-                transmissionTempValue = value;
-              });
-            })),
-            _buildSectionContainer(_buildTextField('Conductor', driverNameController)),
-            _buildSectionContainer(_buildTextField('Color', colorController)),
-            _buildSectionContainer(_buildDateField('Fecha de Última Inspección Técnica', lastTechnicalInspectionDateController)),
-            const SizedBox(height: 20),
-            Center(
-              child: ElevatedButton(
-                onPressed: _updateVehicle,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEA8E00),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              /* foto ─────────────────────────── */
+              GestureDetector(
+                onTap: () async {
+                  final f = await _pickFile();
+                  if (f != null) setState(() => _pickedImg = f);
+                },
+                child: Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: _kCard,
+                    borderRadius: BorderRadius.circular(_kRadius),
+                    image: _pickedImg != null
+                        ? DecorationImage(image: FileImage(_pickedImg!), fit: BoxFit.cover)
+                        : (_thumbnail(v.vehicleImage) != null
+                        ? DecorationImage(image: _thumbnail(v.vehicleImage)!, fit: BoxFit.cover)
+                        : null),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-                  elevation: 5,
-                ),
-                child: const Text(
-                  'Guardar cambios',
-                  style: TextStyle(color: Colors.black, fontSize: 16),
+                  alignment: Alignment.center,
+                  child: (_pickedImg == null && _thumbnail(v.vehicleImage) == null)
+                      ? const Text('Toca para añadir foto', style: TextStyle(color: _kTextSub))
+                      : null,
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+              const SizedBox(height: 20),
 
-  Widget _buildVehicleImage(File image) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(15),
-      child: Image.file(
-        image,
-        height: 200,
-        width: double.infinity,
-        fit: BoxFit.cover,
-      ),
-    );
-  }
+              /* datos básicos ────────────────── */
+              _sectionLabel('Datos generales'),
+              _field('Placa',  _plateC, validator: _required),
+              Row(children: [
+                Expanded(child: _field('Marca', _brandC, validator: _required)),
+                const SizedBox(width: 12),
+                Expanded(child: _field('Modelo', _modelC, validator: _required)),
+              ]),
+              Row(children: [
+                Expanded(child: _field('Año', _yearC, kb: TextInputType.number)),
+                const SizedBox(width: 12),
+                Expanded(child: _field('Color', _colorC)),
+              ]),
+              Row(children: [
+                Expanded(child: _field('Capacidad (pax)', _seatC, kb: TextInputType.number)),
+                const SizedBox(width: 12),
+                Expanded(child: _field('Estado', _statusC)),
+              ]),
 
-  Widget _buildVehicleNetworkImage(String imageUrl) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(15),
-      child: Image.network(
-        imageUrl,
-        height: 200,
-        width: double.infinity,
-        fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Center(
-            child: CircularProgressIndicator(
-              value: loadingProgress.expectedTotalBytes != null
-                  ? loadingProgress.cumulativeBytesLoaded / (loadingProgress.expectedTotalBytes ?? 1)
-                  : null,
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) => _buildNoImagePlaceholder(),
-      ),
-    );
-  }
+              /* mantenimiento ────────────────── */
+              const SizedBox(height: 10),
+              _sectionLabel('Mantenimiento'),
+              _field('Última inspección', _inspC, readOnly: true),
+              Row(children: [
+                Expanded(child: _field('GPS Sensor ID', _gpsC)),
+                const SizedBox(width: 12),
+                Expanded(child: _field('Speed Sensor ID', _speedC)),
+              ]),
 
-  Widget _buildNoImagePlaceholder() {
-    return Container(
-      height: 200,
-      decoration: BoxDecoration(
-        color: const Color(0xFF2A2E35),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: const Center(
-        child: Text(
-          'Toca para seleccionar imagen',
-          style: TextStyle(color: Colors.white70, fontSize: 16),
-        ),
-      ),
-    );
-  }
+              /* asignación ───────────────────── */
+              const SizedBox(height: 10),
+              _sectionLabel('Asignación'),
+              _field('Conductor', _driverC),
 
-  Widget _buildSectionContainer(Widget child) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2F353F),
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
+              /* documentos ───────────────────── */
+              const SizedBox(height: 10),
+              _sectionLabel('Documentos'),
+              Wrap(
+                runSpacing: 8,
+                spacing: 8,
+                children: [
+                  _docButton('SOAT', _pickedSoat, (f) => setState(() => _pickedSoat = f)),
+                  _docButton('Tarjeta Prop.', _pickedCard, (f) => setState(() => _pickedCard = f)),
+                ],
+              ),
 
-  Widget _buildSliderField(String label, double value, ValueChanged<double> onChanged) {
-    String getConditionText(double value) {
-      if (value > 75) {
-        return "En excelente estado";
-      } else if (value > 60) {
-        return "En buen estado";
-      } else if (value > 35) {
-        return "Presenta algunas fallas";
-      } else {
-        return "En mal estado";
-      }
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '$label: ${value.toInt()}%',
-          style: const TextStyle(fontSize: 14, color: Colors.white70, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          getConditionText(value),
-          style: TextStyle(
-            fontSize: 14,
-            color: value > 75
-                ? Colors.green
-                : value > 60
-                ? Colors.amber
-                : value > 35
-                ? Colors.orange
-                : Colors.red,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Slider(
-          value: value,
-          min: 0,
-          max: 100,
-          divisions: 100,
-          label: '${value.toInt()}%',
-          onChanged: onChanged,
-          activeColor: const Color(0xFFEA8E00),
-          inactiveColor: const Color(0xFF2F353F),
-        ),
-      ],
-    );
-  }
-
-
-  Widget _buildDateField(String label, TextEditingController controller) {
-    return TextFormField(
-      controller: controller,
-      readOnly: true,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        filled: true,
-        fillColor: const Color(0xFF3A414B),
-        suffixIcon: IconButton(
-          icon: const Icon(Icons.calendar_today, color: Color(0xFFEA8E00)),
-          onPressed: () async {
-            DateTime? pickedDate = await showDatePicker(
-              context: context,
-              initialDate: DateTime.now(),
-              firstDate: DateTime(2000),
-              lastDate: DateTime(2101),
-              builder: (context, child) {
-                return Theme(
-                  data: Theme.of(context).copyWith(
-                    colorScheme: ColorScheme.dark(
-                      primary: const Color(0xFFEA8E00),
-                      onPrimary: Colors.white,
-                      surface: const Color(0xFF2C2F38),
-                      onSurface: Colors.white,
-                    ),
-                  ),
-                  child: child!,
-                );
-              },
-            );
-            if (pickedDate != null) {
-              setState(() {
-                controller.text = DateFormat('yyyy-MM-dd').format(pickedDate);
-              });
-            }
-          },
-        ),
-      ),
-      style: const TextStyle(color: Colors.white),
-    );
-  }
-
-  Widget _buildTextField(String label, TextEditingController controller) {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        filled: true,
-        fillColor: const Color(0xFF3A414B),
-      ),
-      style: const TextStyle(color: Colors.white),
-    );
-  }
-
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: const Color(0xFF2C2F38),
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          DrawerHeader(
-
-            child: Column(
-              children: [
-                Image.asset(
-                  'assets/images/login_logo.png',
-                  height: 100,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '${widget.name} ${widget.lastName} - Gerente',
-                  style: const TextStyle(color: Colors.grey,  fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-          _buildDrawerItem(Icons.person, 'PERFIL', ProfileScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.people, 'TRANSPORTISTAS',
-              CarrierProfilesScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.report, 'REPORTES', ReportsScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.directions_car, 'VEHICULOS', VehiclesScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.local_shipping, 'ENVIOS', ShipmentsScreen(name: widget.name, lastName: widget.lastName)),
-          const SizedBox(height: 160),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.white),
-            title: const Text('CERRAR SESIÓN', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => LoginScreen(
-                    onLoginClicked: (username, password) {
-                      print('Usuario: $username, Contraseña: $password');
-                    },
-                    onRegisterClicked: () {
-                      print('Registrarse');
-                    },
+              const SizedBox(height: 24),
+              Center(
+                child: ElevatedButton.icon(
+                  onPressed: _save,
+                  icon: const Icon(Icons.save, color: Colors.black),
+                  label: const Text('Guardar cambios', style: TextStyle(color: Colors.black)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _kAction,
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                   ),
                 ),
-                    (Route<dynamic> route) => false,
-              );
-            },
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildDrawerItem(IconData icon, String title, Widget page) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(title, style: const TextStyle(color: Colors.white)),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => page),
-        );
+  /* ───────────────── widgets auxiliares ───────────────── */
+  Widget _field(String lbl, TextEditingController c,
+      {TextInputType kb = TextInputType.text,
+        bool readOnly = false,
+        String? Function(String?)? validator}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextFormField(
+        controller: c,
+        readOnly: readOnly,
+        keyboardType: kb,
+        validator: validator,
+        style: const TextStyle(color: _kTextMain),
+        decoration: _dec(lbl, date: readOnly),
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(text, style: const TextStyle(color: _kTextSub, fontSize: 13)),
+  );
+
+  Widget _docButton(String lbl, File? f, void Function(File) setFile) {
+    return OutlinedButton.icon(
+      onPressed: () async {
+        final picked = await _pickFile();
+        if (picked != null) setFile(picked);
       },
+      icon: Icon(f == null ? Icons.upload : Icons.check_circle, color: _kAction),
+      label: Text(lbl, style: const TextStyle(color: _kTextSub)),
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: _kAction),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_kRadius)),
+      ),
     );
   }
+
+  String? _required(String? v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null;
+
+  /* ---------------- Drawer ---------------- */
+  Drawer _buildDrawer() => Drawer(
+    backgroundColor: const Color(0xFF2C2F38),
+    child: ListView(padding: EdgeInsets.zero, children: [
+      DrawerHeader(
+        child: Column(children: [
+          Image.asset('assets/images/login_logo.png', height: 100),
+          const SizedBox(height: 10),
+          Text('${widget.name} ${widget.lastName} - Gerente',
+              style: const TextStyle(color: Colors.grey, fontSize: 16)),
+        ]),
+      ),
+      _dItem(Icons.person, 'PERFIL',
+          ProfileScreen(name: widget.name, lastName: widget.lastName)),
+      _dItem(
+          Icons.people,
+          'TRANSPORTISTAS',
+          CarrierProfilesScreen(
+              name: widget.name, lastName: widget.lastName)),
+      _dItem(Icons.report, 'REPORTES',
+          ReportsScreen(name: widget.name, lastName: widget.lastName)),
+      _dItem(Icons.directions_car, 'VEHÍCULOS',
+          VehiclesScreen(name: widget.name, lastName: widget.lastName)),
+      _dItem(Icons.local_shipping, 'ENVIOS',
+          ShipmentsScreen(name: widget.name, lastName: widget.lastName)),
+      const SizedBox(height: 160),
+      ListTile(
+        leading: const Icon(Icons.logout, color: Colors.white),
+        title: const Text('CERRAR SESIÓN',
+            style: TextStyle(color: Colors.white)),
+        onTap: () => Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (_) => LoginScreen(
+                onLoginClicked: (_, __) {}, onRegisterClicked: () {}),
+          ),
+              (_) => false,
+        ),
+      ),
+    ]),
+  );
+
+  Widget _dItem(IconData i, String t, Widget p) => ListTile(
+    leading: Icon(i, color: Colors.white),
+    title: Text(t, style: const TextStyle(color: Colors.white)),
+    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => p)),
+  );
 }

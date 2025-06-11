@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehicle_model.dart';
@@ -7,7 +9,6 @@ import 'package:movigestion_mobile/features/vehicle_management/presentation/page
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/reports/reports_carrier_screen.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/shipments/shipments_screen2.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
-
 
 class VehicleDetailCarrierScreenScreen extends StatefulWidget {
   final String name;
@@ -20,309 +21,239 @@ class VehicleDetailCarrierScreenScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _VehicleDetailCarrierScreenScreenState createState() => _VehicleDetailCarrierScreenScreenState();
+  _VehicleDetailCarrierScreenScreenState createState() =>
+      _VehicleDetailCarrierScreenScreenState();
 }
 
-class _VehicleDetailCarrierScreenScreenState extends State<VehicleDetailCarrierScreenScreen> with SingleTickerProviderStateMixin {
-  VehicleModel? vehicle;
-  bool isLoading = true;
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
+class _VehicleDetailCarrierScreenScreenState
+    extends State<VehicleDetailCarrierScreenScreen>
+    with SingleTickerProviderStateMixin {
+  VehicleModel? _vehicle;
+  bool _isLoading = true;
+  late AnimationController _animCtrl;
+  late Animation<double> _fadeAnim;
+
+  final _fmtDate = DateFormat('yyyy-MM-dd');
+  final _fmtDateTime = DateFormat('yyyy-MM-dd HH:mm');
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
+    _animCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 1),
+      duration: const Duration(milliseconds: 800),
     );
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    );
-    _fetchVehicleByDriverName(widget.name);
+    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeInOut);
+    _fetchAssignedVehicle();
   }
 
-  Future<void> _fetchVehicleByDriverName(String driverName) async {
-    final url = Uri.parse('https://app-241107014459.azurewebsites.net/api/vehicles');
+  Future<void> _fetchAssignedVehicle() async {
+    final url = Uri.parse('${const String.fromEnvironment("API_BASE")}/api/vehicles');
     try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        List<dynamic> data = json.decode(response.body);
-        VehicleModel? foundVehicle = data
-            .map((json) => VehicleModel.fromJson(json))
+      final res = await http.get(url);
+      if (res.statusCode == 200) {
+        final list = json.decode(res.body) as List;
+        final found = list
+            .map((j) => VehicleModel.fromJson(j))
             .cast<VehicleModel?>()
-            .firstWhere(
-              (vehicle) => vehicle?.driverName == driverName,
-          orElse: () => null,
-        );
-
-        if (foundVehicle != null) {
-          setState(() {
-            vehicle = foundVehicle;
-            isLoading = false;
-          });
-          _animationController.forward();
-        } else {
-          setState(() {
-            vehicle = null;
-            isLoading = false;
-          });
-        }
-      } else {
+            .firstWhere((v) => v?.driverName == widget.name, orElse: () => null);
         setState(() {
-          isLoading = false;
+          _vehicle = found;
+          _isLoading = false;
         });
+        if (found != null) _animCtrl.forward();
+      } else {
+        setState(() => _isLoading = false);
       }
-    } catch (e) {
-      setState(() {
-        isLoading = false;
-      });
+    } catch (_) {
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _animCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF1A1F24),
       appBar: AppBar(
         backgroundColor: const Color(0xFF2C2F38),
-        title: Row(
-          children: [
-            Icon(Icons.directions_car, color: Colors.amber),
-            const SizedBox(width: 10),
-            Text(
-              'Vehiculo Asignado',
-              style: TextStyle(color: Colors.grey, fontSize: 22, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
+        title: Row(children: [
+          const Icon(Icons.directions_car, color: Colors.amber),
+          const SizedBox(width: 8),
+          const Text('Vehículo Asignado',
+              style: TextStyle(color: Colors.grey, fontSize: 22, fontWeight: FontWeight.w600)),
+        ]),
       ),
-
-      backgroundColor: const Color(0xFF1A1F24),
       drawer: _buildDrawer(),
-      body: isLoading
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.amber))
-          : vehicle != null
-          ? FadeTransition(
-        opacity: _fadeAnimation,
+          : _vehicle == null
+          ? const Center(
+          child: Text('No tienes un vehículo asignado.',
+              style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.w600)))
+          : FadeTransition(
+        opacity: _fadeAnim,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionContainer(_buildVehicleImage(vehicle!.vehicleImage)),
-              const SizedBox(height: 20),
-              _buildSectionContainer(_buildInfoRow('Placa', vehicle!.licensePlate)),
-              _buildSectionContainer(_buildInfoRow('Modelo', vehicle!.model)),
-              _buildSectionContainer(_buildInfoRow('Motor (%)', '${vehicle!.engine}%', isPercentage: true)),
-              _buildSectionContainer(_buildInfoRow('Combustible (%)', '${vehicle!.fuel}%', isPercentage: true)),
-              _buildSectionContainer(_buildInfoRow('Neumáticos (%)', '${vehicle!.tires}%', isPercentage: true)),
-              _buildSectionContainer(_buildInfoRow('Sistema Eléctrico (%)', '${vehicle!.electricalSystem}%', isPercentage: true)),
-              _buildSectionContainer(_buildInfoRow('Temperatura de Transmisión (%)', '${vehicle!.transmissionTemperature}%', isPercentage: true)),
-
-              _buildSectionContainer(_buildInfoRow('Conductor', vehicle!.driverName)),
-              _buildSectionContainer(_buildInfoRow('Color', vehicle!.color)),
-              _buildSectionContainer(
-                _buildInfoRow('Fecha de Última Inspección', DateFormat('yyyy-MM-dd').format(vehicle!.lastTechnicalInspectionDate)),
-              ),
+              _section(_vehicleImage(_vehicle!.vehicleImage)),
+              const SizedBox(height: 16),
+              _section(_infoRow('Placa', _vehicle!.licensePlate)),
+              _section(_infoRow('Marca', _vehicle!.brand)),
+              _section(_infoRow('Modelo', _vehicle!.model)),
+              _section(_infoRow('Año', _vehicle!.year.toString())),
+              _section(_infoRow('Color', _vehicle!.color)),
+              _section(_infoRow('Capacidad', '${_vehicle!.seatingCapacity} pax')),
+              _section(_infoRow('Estado', _vehicle!.status)),
+              _section(_infoRow('Asignado el', _fmtDateTime.format(_vehicle!.assignedAt!))),
+              if (_vehicle!.dateToGoTheWorkshop != null)
+                _section(_infoRow(
+                    'Taller', _fmtDate.format(_vehicle!.dateToGoTheWorkshop!))),
+              const SizedBox(height: 8),
+              _section(_docPreview('SOAT', _vehicle!.documentSoat)),
+              _section(_docPreview('Tarjeta Propiedad', _vehicle!.documentVehicleOwnershipCard)),
+              const SizedBox(height: 8),
+              _section(_infoLocation()),
+              const SizedBox(height: 8),
+              _section(_infoSpeed()),
             ],
           ),
         ),
-      )
-          :  const Center(
-        child: Text(
-          'No te asignaron un vehiculo',
-          style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-      )
-    );
-  }
-
-  Widget _buildSectionContainer(Widget child) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2F353F),
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
-      child: child,
     );
   }
 
-  Widget _buildInfoRow(String label, String value, {bool isPercentage = false}) {
-    String getConditionText(double percentage) {
-      if (percentage > 75) {
-        return "En excelente estado";
-      } else if (percentage > 60) {
-        return "En buen estado";
-      } else if (percentage > 35) {
-        return "Presenta algunas fallas";
-      } else {
-        return "En mal estado";
-      }
-    }
+  Widget _section(Widget child) => Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: const Color(0xFF2F353F),
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 6, offset: const Offset(0, 3))],
+    ),
+    child: child,
+  );
 
-    Color getConditionColor(double percentage) {
-      if (percentage > 75) {
-        return Colors.green;
-      } else if (percentage > 60) {
-        return Colors.amber;
-      } else if (percentage > 35) {
-        return Colors.orange;
-      } else {
-        return Colors.red;
-      }
+  Widget _vehicleImage(String b64) {
+    if (b64.isEmpty) {
+      return Container(
+        height: 200,
+        color: const Color(0xFF3A414B),
+        child: const Center(child: Text('No hay imagen', style: TextStyle(color: Colors.white70))),
+      );
     }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.memory(
+        base64Decode(b64),
+        height: 200,
+        width: double.infinity,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
 
+  Widget _infoRow(String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          flex: 2,
-          child: Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Expanded(
-          flex: 3,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(color: Colors.amber, fontSize: 16),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-              ),
-              if (isPercentage)
-                Text(
-                  getConditionText(double.tryParse(value.replaceAll('%', '')) ?? 0),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: getConditionColor(double.tryParse(value.replaceAll('%', '')) ?? 0),
-                  ),
-                ),
-            ],
+        Text(label, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+        Flexible(child: Text(value, style: const TextStyle(color: Colors.amber), textAlign: TextAlign.end)),
+      ],
+    );
+  }
+
+  Widget _docPreview(String title, String b64) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(title, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        b64.isEmpty
+            ? Container(
+          height: 100,
+          color: const Color(0xFF3A414B),
+          child: const Center(child: Text('No disponible', style: TextStyle(color: Colors.white54))),
+        )
+            : ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            base64Decode(b64),
+            height: 100,
+            width: double.infinity,
+            fit: BoxFit.cover,
           ),
         ),
       ],
     );
   }
 
-
-
-  Widget _buildVehicleImage(String imageUrl) {
-    return imageUrl.isNotEmpty
-        ? ClipRRect(
-      borderRadius: BorderRadius.circular(15),
-      child: Image.network(
-        imageUrl,
-        height: 200,
-        width: double.infinity,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return _buildNoImagePlaceholder();
-        },
-      ),
-    )
-        : _buildNoImagePlaceholder();
+  Widget _infoLocation() {
+    final loc = _vehicle!.lastLocation;
+    return _infoRow(
+      'Última Ubicación',
+      loc != null
+          ? 'Lat ${loc.latitude}, Lon ${loc.longitude}\n${_fmtDateTime.format(loc.timestamp)}'
+          : 'Sin datos',
+    );
   }
 
-  Widget _buildNoImagePlaceholder() {
-    return Container(
-      height: 200,
-      decoration: BoxDecoration(
-        color: const Color(0xFF3A414B),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: const Center(
-        child: Text(
-          'No hay imagen disponible',
-          style: TextStyle(color: Colors.white70, fontSize: 16),
+  Widget _infoSpeed() {
+    final sp = _vehicle!.lastSpeed;
+    return _infoRow(
+      'Última Velocidad',
+      sp != null
+          ? '${sp.kmh} km/h\n${_fmtDateTime.format(sp.timestamp)}'
+          : 'Sin datos',
+    );
+  }
+
+  Drawer _buildDrawer() => Drawer(
+    backgroundColor: const Color(0xFF2C2F38),
+    child: ListView(padding: EdgeInsets.zero, children: [
+      DrawerHeader(
+        child: Column(
+          children: [
+            Image.asset('assets/images/login_logo.png', height: 100),
+            const SizedBox(height: 10),
+            Text('${widget.name} ${widget.lastName} - Transportista',
+                style: const TextStyle(color: Colors.grey, fontSize: 16)),
+          ],
         ),
       ),
-    );
-  }
-
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: const Color(0xFF2C2F38),
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          DrawerHeader(
-
-            child: Column(
-              children: [
-                Image.asset(
-                  'assets/images/login_logo.png',
-                  height: 100,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '${widget.name} ${widget.lastName} - Transportista',
-                  style: const TextStyle(color: Colors.grey,  fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-          _buildDrawerItem(Icons.person, 'PERFIL', ProfileScreen2(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.report, 'REPORTES', ReportsCarrierScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.directions_car, 'VEHICULOS', VehicleDetailCarrierScreenScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.local_shipping, 'ENVIOS', ShipmentsScreen2(name: widget.name, lastName: widget.lastName)),
-          const SizedBox(height: 160),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.white),
-            title: const Text('CERRAR SESIÓN', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => LoginScreen(
-                    onLoginClicked: (username, password) {
-                      print('Usuario: $username, Contraseña: $password');
-                    },
-                    onRegisterClicked: () {
-                      print('Registrarse');
-                    },
-                  ),
-                ),
-                    (Route<dynamic> route) => false,
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawerItem(IconData icon, String title, Widget page) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(title, style: const TextStyle(color: Colors.white)),
-      onTap: () {
-        Navigator.push(
+      _drawerItem(Icons.person, 'PERFIL',
+          ProfileScreen2(name: widget.name, lastName: widget.lastName)),
+      _drawerItem(Icons.report, 'REPORTES',
+          ReportsCarrierScreen(name: widget.name, lastName: widget.lastName)),
+      _drawerItem(Icons.directions_car, 'VEHÍCULO',
+          VehicleDetailCarrierScreenScreen(name: widget.name, lastName: widget.lastName)),
+      _drawerItem(Icons.local_shipping, 'ENVIOS',
+          ShipmentsScreen2(name: widget.name, lastName: widget.lastName)),
+      const SizedBox(height: 160),
+      ListTile(
+        leading: const Icon(Icons.logout, color: Colors.white),
+        title: const Text('CERRAR SESIÓN', style: TextStyle(color: Colors.white)),
+        onTap: () => Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (context) => page),
-        );
-      },
-    );
-  }
+          MaterialPageRoute(
+            builder: (_) =>
+                LoginScreen(onLoginClicked: (_, __) {}, onRegisterClicked: () {}),
+          ),
+              (_) => false,
+        ),
+      ),
+    ]),
+  );
+
+  Widget _drawerItem(IconData icon, String title, Widget page) => ListTile(
+    leading: Icon(icon, color: Colors.white),
+    title: Text(title, style: const TextStyle(color: Colors.white)),
+    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
+  );
 }

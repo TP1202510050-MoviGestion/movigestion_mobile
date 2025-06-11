@@ -1,69 +1,215 @@
+// lib/features/vehicle_management/data/remote/vehicle_model.dart
+
+class Location {
+  final double latitude;
+  final double longitude;
+  final DateTime timestamp;
+
+  Location({
+    required this.latitude,
+    required this.longitude,
+    required this.timestamp,
+  });
+
+  factory Location.fromJson(Map<String, dynamic> json) => Location(
+    latitude: (json['latitude'] as num).toDouble(),
+    longitude: (json['longitude'] as num).toDouble(),
+    timestamp: DateTime.parse(json['timestamp'] as String),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'latitude': latitude,
+    'longitude': longitude,
+    'timestamp': timestamp.toIso8601String(),
+  };
+}
+
+class Speed {
+  final double kmh;
+  final DateTime timestamp;
+
+  Speed({
+    required this.kmh,
+    required this.timestamp,
+  });
+
+  factory Speed.fromJson(Map<String, dynamic> json) => Speed(
+    kmh: (json['kmh'] as num).toDouble(),
+    timestamp: DateTime.parse(json['timestamp'] as String),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'kmh': kmh,
+    'timestamp': timestamp.toIso8601String(),
+  };
+}
+
 class VehicleModel {
-  final int id;
-  final int userId;
+  final int? id;
   final String licensePlate;
+  final String brand;
   final String model;
-  final int engine;
-  final int fuel;
-  final int tires;
-  final int electricalSystem;
-  final int transmissionTemperature;
-  final String driverName;
-  final String vehicleImage; // Codificación base64
+  final int year;
   final String color;
+  final int seatingCapacity;
   final DateTime lastTechnicalInspectionDate;
-  final DateTime createdAt;
+  final String gpsSensorId;
+  final String speedSensorId;
+  final String status;
+  final String driverName;
+  final String companyName;   // ← nuevo
+  final String companyRuc;    // ← nuevo
+  final int? assignedDriverId;
+  final DateTime? assignedAt;
+  final String vehicleImage;
+  final String documentSoat;
+  final String documentVehicleOwnershipCard;
+  final DateTime? dateToGoTheWorkshop;
+  final Location? lastLocation;
+  final Speed? lastSpeed;
 
   VehicleModel({
-    required this.id,
-    required this.userId,
+    this.id,
     required this.licensePlate,
+    required this.brand,
     required this.model,
-    required this.engine,
-    required this.fuel,
-    required this.tires,
-    required this.electricalSystem,
-    required this.transmissionTemperature,
-    required this.driverName,
-    required this.vehicleImage,
+    required this.year,
     required this.color,
+    required this.seatingCapacity,
     required this.lastTechnicalInspectionDate,
-    required this.createdAt,
+    required this.gpsSensorId,
+    required this.speedSensorId,
+    required this.status,
+    required this.driverName,
+    required this.companyName,  // ← requerido
+    required this.companyRuc,   // ← requerido
+    this.assignedDriverId,
+    this.assignedAt,
+    required this.vehicleImage,
+    required this.documentSoat,
+    required this.documentVehicleOwnershipCard,
+    this.dateToGoTheWorkshop,
+    this.lastLocation,
+    this.lastSpeed,
   });
+
+  /* ------------------------------------------------------------------ */
+  /*                               copyWith                             */
+  /* ------------------------------------------------------------------ */
+  VehicleModel copyWith({
+    int?        id,
+    String?     licensePlate,
+    String?     brand,
+    String?     model,
+    int?        year,
+    String?     color,
+    int?        seatingCapacity,
+    DateTime?   lastTechnicalInspectionDate,
+    String?     gpsSensorId,
+    String?     speedSensorId,
+    String?     status,
+    String?     driverName,
+    String?     companyName,
+    String?     companyRuc,
+    int?        assignedDriverId,
+    DateTime?   assignedAt,
+    String?     vehicleImage,
+    String?     documentSoat,
+    String?     documentVehicleOwnershipCard,
+    DateTime?   dateToGoTheWorkshop,
+    Location?   lastLocation,
+    Speed?      lastSpeed,
+  }) {
+    return VehicleModel(
+      id:                          id                          ?? this.id,
+      licensePlate:                licensePlate                ?? this.licensePlate,
+      brand:                       brand                       ?? this.brand,
+      model:                       model                       ?? this.model,
+      year:                        year                        ?? this.year,
+      color:                       color                       ?? this.color,
+      seatingCapacity:             seatingCapacity             ?? this.seatingCapacity,
+      lastTechnicalInspectionDate: lastTechnicalInspectionDate ?? this.lastTechnicalInspectionDate,
+      gpsSensorId:                 gpsSensorId                 ?? this.gpsSensorId,
+      speedSensorId:               speedSensorId               ?? this.speedSensorId,
+      status:                      status                      ?? this.status,
+      driverName:                  driverName                  ?? this.driverName,
+      companyName:                 companyName                 ?? this.companyName,
+      companyRuc:                  companyRuc                  ?? this.companyRuc,
+      assignedDriverId:            assignedDriverId            ?? this.assignedDriverId,
+      assignedAt:                  assignedAt                  ?? this.assignedAt,
+      vehicleImage:                vehicleImage                ?? this.vehicleImage,
+      documentSoat:                documentSoat                ?? this.documentSoat,
+      documentVehicleOwnershipCard:documentVehicleOwnershipCard?? this.documentVehicleOwnershipCard,
+      dateToGoTheWorkshop:         dateToGoTheWorkshop         ?? this.dateToGoTheWorkshop,
+      lastLocation:                lastLocation                ?? this.lastLocation,
+      lastSpeed:                   lastSpeed                   ?? this.lastSpeed,
+    );
+  }
+  /* ------------------------------------------------------------------ */
 
   factory VehicleModel.fromJson(Map<String, dynamic> json) {
     return VehicleModel(
-      id: json['id'],
-      userId: json['userId'],
-      licensePlate: json['licensePlate'],
-      model: json['model'],
-      engine: json['engine'],
-      fuel: json['fuel'],
-      tires: json['tires'],
-      electricalSystem: json['electricalSystem'],
-      transmissionTemperature: json['transmissionTemperature'],
-      driverName: json['driverName'],
-      vehicleImage: json['vehicleImage'],
-      color: json['color'],
-      lastTechnicalInspectionDate: DateTime.parse(json['lastTechnicalInspectionDate']),
-      createdAt: DateTime.parse(json['createdAt']),
+      id: json['id'] as int?,
+      licensePlate: json['licensePlate'] as String,
+      brand: json['brand'] as String,
+      model: json['model'] as String,
+      year: json['year'] as int,
+      color: json['color'] as String,
+      seatingCapacity: json['seatingCapacity'] as int,
+      lastTechnicalInspectionDate:
+      DateTime.parse(json['lastTechnicalInspectionDate'] as String),
+      gpsSensorId: json['gpsSensorId'] as String,
+      speedSensorId: json['speedSensorId'] as String,
+      status: json['status'] as String,
+      driverName: json['driverName'] as String,
+      companyName: json['companyName'] as String? ?? '',
+      companyRuc: json['companyRuc'] as String? ?? '',
+      assignedDriverId: json['assignedDriverId'] as int?,
+      assignedAt: json['assignedAt'] != null
+          ? DateTime.parse(json['assignedAt'] as String)
+          : null,
+      vehicleImage: json['vehicleImage'] as String,
+      documentSoat: json['documentSoat'] as String,
+      documentVehicleOwnershipCard:
+      json['documentVehicleOwnershipCard'] as String,
+      dateToGoTheWorkshop: json['dateToGoTheWorkshop'] != null
+          ? DateTime.parse(json['dateToGoTheWorkshop'] as String)
+          : null,
+      lastLocation: json['lastLocation'] != null
+          ? Location.fromJson(json['lastLocation'] as Map<String, dynamic>)
+          : null,
+      lastSpeed: json['lastSpeed'] != null
+          ? Speed.fromJson(json['lastSpeed'] as Map<String, dynamic>)
+          : null,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
+    final map = <String, dynamic>{
       'licensePlate': licensePlate,
+      'brand': brand,
       'model': model,
-      'engine': engine,
-      'fuel': fuel,
-      'tires': tires,
-      'electricalSystem': electricalSystem,
-      'transmissionTemperature': transmissionTemperature,
-      'driverName': driverName,
-      'vehicleImage': vehicleImage,
+      'year': year,
       'color': color,
-      'lastTechnicalInspectionDate': lastTechnicalInspectionDate.toIso8601String(),
+      'seatingCapacity': seatingCapacity,
+      'lastTechnicalInspectionDate':
+      lastTechnicalInspectionDate.toIso8601String(),
+      'gpsSensorId': gpsSensorId,
+      'speedSensorId': speedSensorId,
+      'status': status,
+      'driverName': driverName,
+      'companyName': companyName,   // ← añadido
+      'companyRuc': companyRuc,     // ← añadido
+      'assignedDriverId': assignedDriverId,
+      'assignedAt': assignedAt?.toIso8601String(),
+      'vehicleImage': vehicleImage,
+      'documentSoat': documentSoat,
+      'documentVehicleOwnershipCard': documentVehicleOwnershipCard,
+      'dateToGoTheWorkshop': dateToGoTheWorkshop?.toIso8601String(),
+      'lastLocation': lastLocation?.toJson(),
+      'lastSpeed': lastSpeed?.toJson(),
     };
+    if (id != null) map['id'] = id;
+    return map;
   }
-
 }

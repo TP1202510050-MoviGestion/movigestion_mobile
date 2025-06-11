@@ -1,464 +1,409 @@
 import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:file_picker/file_picker.dart';
+
+import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehicle_model.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehicle_service.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/profile/profile_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/shipments/shipments_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/vehicle/vehicles_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/reports/reports_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/carrier_profiles/carrier_profiles.dart';
 
+/*  pantallas para el Drawer */
+import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/profile/profile_screen.dart';
+import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/carrier_profiles/carrier_profiles.dart';
+import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/reports/reports_screen.dart';
+import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/vehicle/vehicles_screen.dart';
+import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/shipments/shipments_screen.dart';
+import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
+
+/// ------------------------------------------------------------------
+///                        ASSIGN  VEHICLE  SCREEN
+/// ------------------------------------------------------------------
 class AssignVehicleScreen extends StatefulWidget {
-  final Function(Map<String, String>) onVehicleAdded;
-  final String name;
-  final String lastName;
+  final void Function(VehicleModel) onVehicleAdded;
+  final String name, lastName;
 
   const AssignVehicleScreen({
-    Key? key,
+    super.key,
     required this.onVehicleAdded,
     required this.name,
     required this.lastName,
-  }) : super(key: key);
+  });
 
   @override
-  _AssignVehicleScreenState createState() => _AssignVehicleScreenState();
+  State<AssignVehicleScreen> createState() => _AssignVehicleScreenState();
 }
 
-class _AssignVehicleScreenState extends State<AssignVehicleScreen> with SingleTickerProviderStateMixin {
+class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
+  /* ------------ services & utils ------------ */
+  final _svc     = VehicleService();
+  final _profile = ProfileService();
+  final _fmt     = DateFormat('yyyy-MM-dd');
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController modelController = TextEditingController();
-  final TextEditingController plateController = TextEditingController();
-  final TextEditingController assignedDriverController = TextEditingController();
-  final TextEditingController colorController = TextEditingController();
-  final TextEditingController lastInspectionDateController = TextEditingController();
-  final VehicleService vehicleService = VehicleService();
 
-  String? _selectedImageBase64;
-  double engineValue = 50;
-  double fuelValue = 50;
-  double tiresValue = 50;
-  double electricalSystemValue = 50;
-  double transmissionTempValue = 50;
+  /* ------------- UI state ------------- */
+  bool _saving = false;                       // ← indicador de carga
 
-  Future<void> _pickImage() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
+  /* ------------- text-controllers ------------- */
+  final _plateC = TextEditingController();
+  final _brandC = TextEditingController();
+  final _modelC = TextEditingController();
+  final _yearC  = TextEditingController();
+  final _colorC = TextEditingController();
+  final _seatC  = TextEditingController();
+  final _gpsC   = TextEditingController();
+  final _spdC   = TextEditingController();
+  final _drvC   = TextEditingController();
+  late final TextEditingController _inspC;    // fecha última inspección
+
+  /* ------------- archivos en base-64 ------------- */
+  String? _img64, _soat64, _card64;
+
+  /* ------------- datos empresa ------------- */
+  String _companyName = '';
+  String _companyRuc  = '';
+
+  /* ====================== init ====================== */
+  @override
+  void initState() {
+    super.initState();
+    _inspC = TextEditingController(text: _fmt.format(DateTime.now()));
+    _loadCompanyData();
+  }
+
+  Future<void> _loadCompanyData() async {
+    final prof = await _profile.getProfileByNameAndLastName(
+      widget.name, widget.lastName,
+    );
+    if (!mounted) return;
+    setState(() {
+      _companyName = prof?.companyName ?? '';
+      _companyRuc  = prof?.companyRuc  ?? '';
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final c in [
+      _plateC, _brandC, _modelC, _yearC, _colorC,
+      _seatC, _gpsC, _spdC, _drvC, _inspC,
+    ]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  /* ===================== helpers UI ===================== */
+  Future<void> _pickDate(TextEditingController ctl) async {
+    final d = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate : DateTime(2000),
+      lastDate  : DateTime(2100),
+      builder   : (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary  : Color(0xFFEA8E00),
+            onPrimary: Colors.white,
+            surface  : Color(0xFF2C2F38),
+            onSurface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (d != null) ctl.text = _fmt.format(d);
+  }
+
+  Future<void> _pickFile(void Function(String) save) async {
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.any,
       withData: true,
     );
-
-    if (result != null && result.files.single.bytes != null) {
-      setState(() {
-        _selectedImageBase64 = base64Encode(result.files.single.bytes!);
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Imagen seleccionada y convertida a base64',
-            style: const TextStyle(color: Colors.white),
+    if (res?.files.single.bytes != null) {
+      save(base64Encode(res!.files.single.bytes!));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Archivo cargado'),
+            backgroundColor: Colors.green,
           ),
+        );
+      }
+    }
+  }
+
+  /* ---------- campos de texto y fecha ---------- */
+  Widget _txt(String lbl, TextEditingController c,
+      {TextInputType kb = TextInputType.text}) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextFormField(
+          controller: c,
+          keyboardType: kb,
+          style: const TextStyle(color: Colors.white),
+          decoration: _dec(lbl),
+          validator: (v) => v == null || v.trim().isEmpty
+              ? 'Ingrese $lbl'
+              : null,
+        ),
+      );
+
+  Widget _date(String lbl, TextEditingController c) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextFormField(
+          controller: c,
+          readOnly: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: _dec(lbl).copyWith(
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.calendar_today,
+                  color: Color(0xFFEA8E00)),
+              onPressed: () => _pickDate(c),
+            ),
+          ),
+          validator: (v) => v == null || v.isEmpty
+              ? 'Seleccione $lbl'
+              : null,
+        ),
+      );
+
+  InputDecoration _dec(String lbl) => InputDecoration(
+    labelText : lbl,
+    labelStyle: const TextStyle(color: Colors.white70),
+    filled    : true,
+    fillColor : const Color(0xFF2F353F),
+    border    : OutlineInputBorder(
+      borderRadius: BorderRadius.circular(15),
+    ),
+  );
+
+  /* ---------- botón reutilizable para subir archivos ---------- */
+  Widget _fileButton(String lbl, IconData icon,
+      void Function(String) save) =>
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: () => _pickFile(save),
+          icon : Icon(icon, color: Colors.white),
+          label: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(lbl),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFEA8E00),
+            foregroundColor: Colors.black,
+            elevation: 2,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+          ),
+        ),
+      );
+
+  /* ---------- fila de acciones Cerrar / Registrar ---------- */
+  Widget _actionButtons() => Row(
+    children: [
+      Expanded(
+        child: OutlinedButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white70,
+            side: const BorderSide(color: Colors.white60),
+            padding:
+            const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+          ),
+          child: const Text('Cerrar'),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: ElevatedButton(
+          onPressed: _saving ? null : _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFEA8E00),
+            foregroundColor: Colors.black,
+            padding:
+            const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+          ),
+          child: const Text('Registrar'),
+        ),
+      ),
+    ],
+  );
+
+  /* ===================== SUBMIT ===================== */
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _saving = true);
+
+    final vehicle = VehicleModel(
+      licensePlate : _plateC.text.trim(),
+      brand        : _brandC.text.trim(),
+      model        : _modelC.text.trim(),
+      year         : int.parse(_yearC.text.trim()),
+      color        : _colorC.text.trim(),
+      seatingCapacity: int.parse(_seatC.text.trim()),
+      lastTechnicalInspectionDate: _fmt.parse(_inspC.text),
+      gpsSensorId  : _gpsC.text.trim(),
+      speedSensorId: _spdC.text.trim(),
+      status       : 'Activo',
+      driverName   : _drvC.text.trim(),
+      companyName  : _companyName,
+      companyRuc   : _companyRuc,
+      assignedDriverId: null,
+      assignedAt   : DateTime.now(),
+      vehicleImage : _img64 ?? '',
+      documentSoat : _soat64 ?? '',
+      documentVehicleOwnershipCard: _card64 ?? '',
+      dateToGoTheWorkshop: null,
+      lastLocation : null,
+      lastSpeed    : null,
+    );
+
+    final ok = await _svc.createVehicle(vehicle);
+    if (!mounted) return;
+
+    setState(() => _saving = false);
+
+    if (ok) {
+      widget.onVehicleAdded(vehicle);
+      Navigator.pop(context);   // regresa a VehiclesScreen
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vehículo creado'),
           backgroundColor: Colors.green,
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'No se seleccionó ninguna imagen',
-            style: const TextStyle(color: Colors.white),
-          ),
+        const SnackBar(
+          content: Text('Error al crear vehículo'),
           backgroundColor: Colors.redAccent,
         ),
       );
     }
   }
 
-  Future<void> _createVehicle() async {
-    if (_formKey.currentState!.validate()) {
-      final vehicle = VehicleModel(
-        id: 0,
-        userId: 1,
-        licensePlate: plateController.text,
-        model: modelController.text,
-        engine: engineValue.toInt(),
-        fuel: fuelValue.toInt(),
-        tires: tiresValue.toInt(),
-        electricalSystem: electricalSystemValue.toInt(),
-        transmissionTemperature: transmissionTempValue.toInt(),
-        driverName: assignedDriverController.text,
-        vehicleImage: _selectedImageBase64 ?? '',
-        color: colorController.text,
-        lastTechnicalInspectionDate: DateFormat('yyyy-MM-dd').parse(lastInspectionDateController.text),
-        createdAt: DateTime.now(),
-      );
-
-      try {
-        final success = await vehicleService.createVehicle(vehicle);
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Vehículo asignado exitosamente'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          Navigator.pop(context);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Error al asignar el vehículo'),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Error al enviar la solicitud: $e',
-              style: const TextStyle(color: Colors.white),
-            ),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    }
-  }
-
+  /* ===================== BUILD ===================== */
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF1E1F24),
       appBar: AppBar(
         backgroundColor: const Color(0xFF2C2F38),
-        title: const Text(
-          'Asignar Vehículo',
-          style: TextStyle(color: Colors.white),
-        ),
-        elevation: 0,
+        title: const Text('Asignar Vehículo',
+            style: TextStyle(color: Colors.white)),
       ),
-      backgroundColor: const Color(0xFF1E1F24),
       drawer: _buildDrawer(),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionContainer(_buildTextField('Modelo del vehículo', modelController)),
-              const SizedBox(height: 15),
-              _buildSectionContainer(_buildTextField('Placa del vehículo', plateController)),
-              const SizedBox(height: 15),
-              _buildSectionContainer(_buildTextField('Conductor asignado', assignedDriverController)),
-              const SizedBox(height: 15),
-              _buildSectionContainer(_buildSliderField('Porcentaje de Motor', engineValue, (value) {
-                setState(() {
-                  engineValue = value;
-                });
-              })),
-              const SizedBox(height: 15),
-              _buildSectionContainer(_buildSliderField('Porcentaje de Combustible', fuelValue, (value) {
-                setState(() {
-                  fuelValue = value;
-                });
-              })),
-              const SizedBox(height: 15),
-              _buildSectionContainer(_buildSliderField('Porcentaje de Neumáticos', tiresValue, (value) {
-                setState(() {
-                  tiresValue = value;
-                });
-              })),
-              const SizedBox(height: 15),
-              _buildSectionContainer(_buildSliderField('Porcentaje del Sistema Eléctrico', electricalSystemValue, (value) {
-                setState(() {
-                  electricalSystemValue = value;
-                });
-              })),
-              const SizedBox(height: 15),
-              _buildSectionContainer(_buildSliderField('Temperatura de Transmisión', transmissionTempValue, (value) {
-                setState(() {
-                  transmissionTempValue = value;
-                });
-              })),
-              const SizedBox(height: 15),
-              _buildSectionContainer(_buildTextField('Color del vehículo', colorController)),
-              const SizedBox(height: 15),
-              _buildSectionContainer(_buildDateField('Fecha de última inspección', lastInspectionDateController)),
-              const SizedBox(height: 20),
-              _buildImagePicker(),
-              const SizedBox(height: 30),
-              Center(
-                child: ElevatedButton(
-                  onPressed: _createVehicle,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEA8E00),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 40),
-                    elevation: 5,
-                  ),
-                  child: const Text(
-                    'Asignar Vehículo',
-                    style: TextStyle(color: Colors.black),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionContainer(Widget child) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2F353F),
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  Widget _buildSliderField(String label, double value, ValueChanged<double> onChanged) {
-    String getConditionText(double value) {
-      if (value > 75) {
-        return "En excelente estado";
-      } else if (value > 60) {
-        return "En buen estado";
-      } else if (value > 35) {
-        return "Presenta algunas fallas";
-      } else {
-        return "En mal estado";
-      }
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '$label: ${value.toInt()}%',
-          style: const TextStyle(fontSize: 16, color: Colors.white70, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          getConditionText(value),
-          style: TextStyle(
-            fontSize: 14,
-            color: value > 75
-                ? Colors.green
-                : value > 60
-                ? Colors.amber
-                : value > 35
-                ? Colors.orange
-                : Colors.red,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Slider(
-          value: value,
-          min: 0,
-          max: 100,
-          divisions: 100,
-          label: '${value.toInt()}%',
-          onChanged: onChanged,
-          activeColor: const Color(0xFFEA8E00),
-          inactiveColor: const Color(0xFF2F353F),
-        ),
-      ],
-    );
-  }
-
-
-  Widget _buildDateField(String label, TextEditingController controller) {
-    return TextFormField(
-      controller: controller,
-      readOnly: true,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(15),
-        ),
-        filled: true,
-        fillColor: const Color(0xFF3A414B),
-        suffixIcon: IconButton(
-          icon: const Icon(Icons.calendar_today, color: Color(0xFFEA8E00)),
-          onPressed: () async {
-            DateTime? pickedDate = await showDatePicker(
-              context: context,
-              initialDate: DateTime.now(),
-              firstDate: DateTime(2000),
-              lastDate: DateTime(2101),
-              builder: (context, child) {
-                return Theme(
-                  data: Theme.of(context).copyWith(
-                    colorScheme: ColorScheme.dark(
-                      primary: const Color(0xFFEA8E00),
-                      onPrimary: Colors.white,
-                      surface: const Color(0xFF2C2F38),
-                      onSurface: Colors.white,
-                    ),
-                  ),
-                  child: child!,
-                );
-              },
-            );
-            if (pickedDate != null) {
-              setState(() {
-                controller.text = DateFormat('yyyy-MM-dd').format(pickedDate);
-              });
-            }
-          },
-        ),
-      ),
-      style: const TextStyle(color: Colors.white),
-    );
-  }
-
-  Widget _buildTextField(String label, TextEditingController controller) {
-    return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(15),
-        ),
-        filled: true,
-        fillColor: const Color(0xFF3A414B),
-      ),
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return 'Por favor, ingrese $label';
-        }
-        return null;
-      },
-      style: const TextStyle(color: Colors.white),
-    );
-  }
-
-  Widget _buildImagePicker() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Subir imagen del vehículo',
-          style: TextStyle(color: Colors.white70),
-        ),
-        const SizedBox(height: 10),
-        _selectedImageBase64 == null
-            ? ElevatedButton.icon(
-          onPressed: _pickImage,
-          icon: const Icon(Icons.upload, color: Colors.white),
-          label: const Text('Seleccionar Imagen', style: TextStyle(color: Colors.black)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFEA8E00),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-          ),
-        )
-            : Column(
+      body: IgnorePointer(
+        ignoring: _saving,
+        child: Stack(
           children: [
-            Image.memory(
-              base64Decode(_selectedImageBase64!),
-              height: 150,
-              fit: BoxFit.cover,
-            ),
-            const SizedBox(height: 10),
-            ElevatedButton.icon(
-              onPressed: _pickImage,
-              icon: const Icon(Icons.edit, color: Colors.white),
-              label: const Text('Cambiar Imagen', style: TextStyle(color: Colors.black)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEA8E00),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
+            Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  _txt('Placa', _plateC),
+                  _txt('Marca', _brandC),
+                  _txt('Modelo', _modelC),
+                  _txt('Año', _yearC, kb: TextInputType.number),
+                  _txt('Color', _colorC),
+                  _txt('Capacidad (pax)', _seatC,
+                      kb: TextInputType.number),
+                  _txt('GPS Sensor ID', _gpsC),
+                  _txt('Speed Sensor ID', _spdC),
+                  _txt('Nombre del conductor', _drvC),
+                  const SizedBox(height: 12),
+                  _date('Última inspección', _inspC),
+                  const SizedBox(height: 12),
+
+                  _fileButton('Imagen del vehículo',
+                      Icons.camera_alt, (b) => setState(() => _img64 = b)),
+                  const SizedBox(height: 12),
+                  _fileButton('Documento SOAT',
+                      Icons.upload, (b) => setState(() => _soat64 = b)),
+                  const SizedBox(height: 12),
+                  _fileButton('Tarjeta de Propiedad',
+                      Icons.upload_file, (b) => setState(() => _card64 = b)),
+
+                  const SizedBox(height: 32),
+                  _actionButtons(),
+                  const SizedBox(height: 24),
+                ],
               ),
             ),
+
+            if (_saving)
+              Container(
+                color: Colors.black45,
+                child: const Center(
+                  child: CircularProgressIndicator(
+                      color: Color(0xFFEA8E00)),
+                ),
+              ),
           ],
         ),
-      ],
-    );
-  }
-
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: const Color(0xFF2C2F38),
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          DrawerHeader(
-            child: Column(
-              children: [
-                Image.asset(
-                  'assets/images/login_logo.png',
-                  height: 100,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '${widget.name} ${widget.lastName} - Gerente',
-                  style: const TextStyle(color: Colors.grey,  fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-          _buildDrawerItem(Icons.person, 'PERFIL', ProfileScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.people, 'TRANSPORTISTAS',
-              CarrierProfilesScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.report, 'REPORTES', ReportsScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.directions_car, 'VEHÍCULOS', VehiclesScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.local_shipping, 'ENVIOS', ShipmentsScreen(name: widget.name, lastName: widget.lastName)),
-          const SizedBox(height: 160),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.white),
-            title: const Text('CERRAR SESIÓN', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => LoginScreen(
-                    onLoginClicked: (username, password) {
-                      print('Usuario: $username, Contraseña: $password');
-                    },
-                    onRegisterClicked: () {
-                      print('Registrarse');
-                    },
-                  ),
-                ),
-                    (Route<dynamic> route) => false,
-              );
-            },
-          ),
-        ],
       ),
     );
   }
 
-  Widget _buildDrawerItem(IconData icon, String title, Widget page) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(title, style: const TextStyle(color: Colors.white)),
-      onTap: () {
-        Navigator.push(
+  /* ===================== Drawer ===================== */
+  Drawer _buildDrawer() => Drawer(
+    backgroundColor: const Color(0xFF2C2F38),
+    child: ListView(padding: EdgeInsets.zero, children: [
+      DrawerHeader(
+        child: Column(children: [
+          Image.asset('assets/images/login_logo.png', height: 100),
+          const SizedBox(height: 10),
+          Text('${widget.name} ${widget.lastName} - Gerente',
+              style:
+              const TextStyle(color: Colors.grey, fontSize: 16)),
+        ]),
+      ),
+      _dItem(Icons.person, 'PERFIL',
+          ProfileScreen(name: widget.name, lastName: widget.lastName)),
+      _dItem(Icons.people, 'TRANSPORTISTAS',
+          CarrierProfilesScreen(name: widget.name, lastName: widget.lastName)),
+      _dItem(Icons.report, 'REPORTES',
+          ReportsScreen(name: widget.name, lastName: widget.lastName)),
+      _dItem(Icons.directions_car, 'VEHÍCULOS',
+          VehiclesScreen(name: widget.name, lastName: widget.lastName)),
+      _dItem(Icons.local_shipping, 'ENVIOS',
+          ShipmentsScreen(name: widget.name, lastName: widget.lastName)),
+      const SizedBox(height: 160),
+      ListTile(
+        leading: const Icon(Icons.logout, color: Colors.white),
+        title: const Text('CERRAR SESIÓN',
+            style: TextStyle(color: Colors.white)),
+        onTap: () => Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (context) => page),
-        );
-      },
-    );
-  }
+          MaterialPageRoute(
+            builder: (_) => LoginScreen(
+              onLoginClicked: (_, __) {},
+              onRegisterClicked: () {},
+            ),
+          ),
+              (_) => false,
+        ),
+      ),
+    ]),
+  );
+
+  Widget _dItem(IconData i, String t, Widget p) => ListTile(
+    leading: Icon(i, color: Colors.white),
+    title: Text(t, style: const TextStyle(color: Colors.white)),
+    onTap: () =>
+        Navigator.push(context, MaterialPageRoute(builder: (_) => p)),
+  );
 }
