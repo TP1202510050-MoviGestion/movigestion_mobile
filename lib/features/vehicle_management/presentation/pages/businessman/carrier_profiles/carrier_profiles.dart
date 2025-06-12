@@ -22,7 +22,6 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
   bool _loading = true;
   List<Map<String, dynamic>> _carriers = [];
 
-  // datos del gerente (para heredar)
   String _companyName = '';
   String _companyRuc  = '';
 
@@ -140,7 +139,6 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
     );
   }
 
-  // ---------- ADD ----------
   Future<void> _showAddCarrierDialog() async {
     final nameC = TextEditingController();
     final lastC = TextEditingController();
