@@ -5,12 +5,8 @@ import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehic
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehicle_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/vehicle/assign_vehicle_screen.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/vehicle/vehicle_detail_screen.dart';
-import '../../login_register/login_screen.dart';
-import '../carrier_profiles/carrier_profiles.dart';
-import '../profile/profile_screen.dart';
-import '../reports/reports_screen.dart';
-import '../shipments/shipments_screen.dart';
-/* -------------------------------------- */
+import '../../../../../../core/widgets/app_drawer.dart';
+
 
 class VehiclesScreen extends StatefulWidget {
   final String name;
@@ -73,7 +69,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
           ],
         ),
       ),
-      drawer: _buildDrawer(),
+      drawer: AppDrawer(name: widget.name, lastName: widget.lastName),
       body: RefreshIndicator(
         onRefresh: _fetchVehicles,
         color: Colors.amber,
@@ -131,54 +127,6 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     );
   }
 
-  /* ------------ DRAWER ------------ */
-  Drawer _buildDrawer() {
-    Widget item(IconData icon, String label, Widget page) => ListTile(
-      leading: Icon(icon, color: Colors.white),
-      title: Text(label, style: const TextStyle(color: Colors.white)),
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
-    );
-
-    return Drawer(
-      backgroundColor: const Color(0xFF2C2F38),
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          DrawerHeader(
-            child: Column(
-              children: [
-                Image.asset('assets/images/login_logo.png', height: 90),
-                const SizedBox(height: 10),
-                Text('${widget.name} ${widget.lastName} – Gerente',
-                    style: const TextStyle(color: Colors.grey)),
-              ],
-            ),
-          ),
-          item(Icons.person, 'PERFIL',
-              ProfileScreen(name: widget.name, lastName: widget.lastName)),
-          item(Icons.people, 'TRANSPORTISTAS',
-              CarrierProfilesScreen(name: widget.name, lastName: widget.lastName)),
-          item(Icons.report, 'REPORTES',
-              ReportsScreen(name: widget.name, lastName: widget.lastName)),
-          item(Icons.directions_car, 'VEHÍCULOS',
-              VehiclesScreen(name: widget.name, lastName: widget.lastName)),
-          item(Icons.local_shipping, 'ENVIOS',
-              ShipmentsScreen(name: widget.name, lastName: widget.lastName)),
-          const SizedBox(height: 140),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.white),
-            title: const Text('CERRAR SESIÓN', style: TextStyle(color: Colors.white)),
-            onTap: () => Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (_) =>
-                  LoginScreen(onLoginClicked: (_, __) {}, onRegisterClicked: () {})),
-                  (_) => false,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /* ═════════════  CARD DE VEHÍCULO  ════════════ */

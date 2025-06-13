@@ -6,4 +6,5 @@ class AppConstants {
   static const String report = '/api/reports';
   static const String shipment = '/api/shipments';
   static const String vehicle = '/api/vehicles';
+  static const String route = '/api/routes';
 }

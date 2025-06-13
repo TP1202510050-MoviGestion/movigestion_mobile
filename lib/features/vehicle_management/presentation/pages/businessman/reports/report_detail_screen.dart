@@ -1,17 +1,34 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_model.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
 
-import '../../login_register/login_screen.dart';
-import '../carrier_profiles/carrier_profiles.dart';
-import '../profile/profile_screen.dart';
-import '../shipments/shipments_screen.dart';
-import '../vehicle/vehicles_screen.dart';
-import 'reports_screen.dart';
+import '../../../../../../core/widgets/app_drawer.dart';
+
+// TODO: Asegúrate de que la ruta de importación para tu AppDrawer sea correcta.
+// Si creaste la carpeta 'widgets', esta ruta debería funcionar.
+
+// --- THEME CONSTANTS (Idealmente, esto iría en un archivo de tema separado) ---
+class AppColors {
+  static const Color background = Color(0xFF1E1F24);
+  static const Color surface = Color(0xFF2C2F38);
+  static const Color primary = Colors.amber;
+  static const Color text = Colors.white;
+  static const Color textSecondary = Colors.white70;
+  static const Color success = Colors.green;
+  static const Color danger = Colors.red;
+}
+
+class AppTextStyles {
+  static const TextStyle heading = TextStyle(color: AppColors.text, fontSize: 24, fontWeight: FontWeight.bold);
+  static const TextStyle subheading = TextStyle(color: AppColors.text, fontSize: 18, fontWeight: FontWeight.w600);
+  static const TextStyle body = TextStyle(color: AppColors.text, fontSize: 16);
+  static const TextStyle bodySecondary = TextStyle(color: AppColors.textSecondary, fontSize: 14);
+}
+// -----------------------------------------------------------------------------
+
 
 class ReportDetailScreen extends StatefulWidget {
   final ReportModel report;
@@ -25,16 +42,22 @@ class ReportDetailScreen extends StatefulWidget {
     required this.report,
   }) : super(key: key);
 
+
+
+
+
+
   @override
   _ReportDetailScreenState createState() => _ReportDetailScreenState();
 }
 
 class _ReportDetailScreenState extends State<ReportDetailScreen> {
-  final ReportService _reportService   = ReportService();
+  final ReportService _reportService = ReportService();
   final ProfileService _profileService = ProfileService();
 
   late ReportModel _report;
   String _phone = '';
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -44,11 +67,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     _fetchPhone();
   }
 
+  // --- LÓGICA DE NEGOCIO (Preservada del original, con mejoras de seguridad) ---
   Future<void> _markInProgress() async {
     if (_report.status != 'En Proceso') {
       final updated = _report.copyWith(status: 'En Proceso');
       final ok = await _reportService.updateReport(updated);
-      if (ok) setState(() => _report = updated);
+      if (ok && mounted) setState(() => _report = updated);
     }
   }
 
@@ -58,202 +82,315 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       parts.first,
       parts.length > 1 ? parts.last : '',
     );
-    setState(() {
-      _phone = prof?.phone ?? '';
-    });
-  }
-
-  Future<void> _deleteReport() async {
-    final ok = await _reportService.deleteReport(_report.id!);
-    if (ok) {
-      Navigator.pop(context, true);
-    } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Error al eliminar')));
+    if (mounted) {
+      setState(() {
+        _phone = prof?.phone ?? '';
+      });
     }
   }
 
+  // --- ACCIONES DEL USUARIO CON FEEDBACK Y CONTROL DE ESTADO ---
   Future<void> _markResolved() async {
-    if (_report.status != 'Resuelto') {
+    if (_isLoading || _report.status == 'Resuelto') return;
+
+    setState(() => _isLoading = true);
+    try {
       final updated = _report.copyWith(status: 'Resuelto');
       final ok = await _reportService.updateReport(updated);
-      if (ok) setState(() => _report = updated);
+      if (ok && mounted) {
+        setState(() => _report = updated);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reporte marcado como Resuelto'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        throw Exception('Error al actualizar');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al marcar como resuelto'), backgroundColor: AppColors.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _deleteReport() async {
+    final bool? confirmDelete = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Confirmar Eliminación', style: AppTextStyles.subheading),
+        content: const Text('¿Estás seguro de que quieres eliminar este reporte? Esta acción no se puede deshacer.', style: AppTextStyles.body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmDelete != true) return;
+    if (_isLoading) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final ok = await _reportService.deleteReport(_report.id!);
+      if (ok && mounted) {
+        Navigator.pop(context, true);
+      } else {
+        throw Exception('Error al eliminar');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al eliminar el reporte'), backgroundColor: AppColors.danger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _callDriver() async {
+    if (_phone.isEmpty) return;
     final uri = Uri.parse('tel:$_phone');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('No se puede llamar')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se puede realizar la llamada')),
+        );
+      }
     }
   }
 
+  // --- MÉTODO BUILD PRINCIPAL ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // AppBar por defecto mostrará hamburguesa si hay drawer
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Detalle del Reporte'),
-        backgroundColor: const Color(0xFF2C2F38),
+        backgroundColor: AppColors.surface,
+        elevation: 0,
       ),
-      drawer: _buildDrawer(context),
-      backgroundColor: const Color(0xFF1E1F24),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              color: const Color(0xFF2C2F38),
-              child: Column(
-                children: [
-                  _buildTile(Icons.person,    'Conductor', _report.driverName),
-                  _divider(),
-                  _buildTile(Icons.business,  'Empresa',   _report.companyName),
-                  _divider(),
-                  _buildTile(Icons.badge,     'RUC',       _report.companyRuc),
-                  _divider(),
-                  _buildTile(Icons.report,    'Tipo',      _report.type),
-                  _divider(),
-                  _buildTile(Icons.description,'Descripción', _report.description),
-                  _divider(),
-                  _buildTile(Icons.calendar_today, 'Creado',
-                      '${_report.createdAt.toLocal()}'.split('.')[0]),
-                  _divider(),
-                  _buildTile(Icons.location_on, 'Ubicación', _report.location),
-                  _divider(),
-                  _buildTile(Icons.directions_car, 'Placa', _report.vehiclePlate),
-                  _divider(),
-                  _buildTile(Icons.info,       'Estado',    _report.status),
+      drawer: AppDrawer(name: widget.name, lastName: widget.lastName),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildReportHeader(),
+                const SizedBox(height: 24),
+                if (_report.photoOrVideo.isNotEmpty) ...[
+                  _buildMediaDisplay(),
+                  const SizedBox(height: 24),
                 ],
+                _buildInfoCard(
+                  title: 'Detalles del Reporte',
+                  icon: Icons.description,
+                  data: {
+                    'Descripción': _report.description,
+                    'Ubicación': _report.location,
+                    'Fecha de Creación': '${_report.createdAt.toLocal()}'.split('.')[0],
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildInfoCard(
+                  title: 'Información del Conductor',
+                  icon: Icons.person,
+                  data: {
+                    'Conductor': _report.driverName,
+                    'Empresa': _report.companyName,
+                    'RUC': _report.companyRuc,
+                    'Placa del Vehículo': _report.vehiclePlate,
+                  },
+                ),
+                const SizedBox(height: 32),
+                _buildActionButtons(),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+          if (_isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
               ),
             ),
-            const SizedBox(height: 16),
-            if (_report.photoOrVideo.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.memory(
-                  base64Decode(_report.photoOrVideo),
-                  width: double.infinity,
-                  height: 200,
-                  fit: BoxFit.cover,
+        ],
+      ),
+    );
+  }
+
+  // --- WIDGETS DE UI REFACTORIZADOS ---
+  Widget _buildReportHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(_report.type, style: AppTextStyles.heading),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Chip(
+            label: Text(_report.status, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            backgroundColor: _report.status == 'Resuelto' ? AppColors.success : AppColors.primary,
+            avatar: Icon(
+              _report.status == 'Resuelto' ? Icons.check_circle : Icons.hourglass_top,
+              color: Colors.black,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMediaDisplay() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Evidencia', style: AppTextStyles.subheading),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.memory(
+            base64Decode(_report.photoOrVideo),
+            width: double.infinity,
+            height: 220,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                height: 220,
+                color: AppColors.surface,
+                child: const Center(child: Icon(Icons.error_outline, color: AppColors.danger, size: 40)),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoCard({
+    required String title,
+    required IconData icon,
+    required Map<String, String> data,
+  }) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: AppColors.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: AppColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(title, style: AppTextStyles.subheading),
+              ],
+            ),
+            const Divider(color: Colors.white24, height: 24, thickness: 1),
+            ...data.entries.map((entry) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: _buildInfoRow(title: entry.key, value: entry.value),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow({required String title, required String value}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: AppTextStyles.bodySecondary),
+        const SizedBox(height: 4),
+        Text(value, style: AppTextStyles.body),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_report.status != 'Resuelto')
+          ElevatedButton.icon(
+            onPressed: _isLoading ? null : _markResolved,
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('MARCAR COMO RESUELTO'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.success,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              textStyle: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        if (_report.status != 'Resuelto') const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isLoading || _phone.isEmpty ? null : _callDriver,
+                icon: const Icon(Icons.phone),
+                label: const Text('Llamar'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
               ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: Container(
-        color: const Color(0xFF2C2F38),
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        child: Row(
-          children: [
-            TextButton.icon(
-              onPressed: () => Navigator.pop(context, false),
-              icon: const Icon(Icons.close, color: Colors.white),
-              label: const Text('Cerrar', style: TextStyle(color: Colors.white)),
             ),
-            const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.delete, size: 28, color: Colors.red),
-              onPressed: _deleteReport,
-            ),
-            IconButton(
-              icon: const Icon(Icons.check_circle, size: 28, color: Colors.green),
-              onPressed: _markResolved,
-            ),
-            IconButton(
-              icon: const Icon(Icons.phone, size: 28, color: Colors.amber),
-              onPressed: _phone.isNotEmpty ? _callDriver : null,
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isLoading ? null : _deleteReport,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Eliminar'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.danger,
+                  side: const BorderSide(color: AppColors.danger),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 24),
+        const Divider(color: Colors.white24),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          icon: const Icon(Icons.arrow_back),
+          label: const Text('Volver a Reportes'),
+          onPressed: () => Navigator.pop(context),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.textSecondary,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+        )
+      ],
     );
   }
-
-  Widget _buildTile(IconData icon, String title, String subtitle) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.amber),
-      title: Text(title, style: const TextStyle(color: Colors.white70)),
-      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-    );
-  }
-
-  Widget _divider() => const Divider(color: Colors.white24, height: 1);
-
-  Drawer _buildDrawer(BuildContext ctx) => Drawer(
-    backgroundColor: const Color(0xFF2C2F38),
-    child: ListView(padding: EdgeInsets.zero, children: [
-      DrawerHeader(
-        child: Column(
-          children: [
-            Image.asset('assets/images/login_logo.png', height: 100),
-            const SizedBox(height: 10),
-            Text(
-              '${widget.name} ${widget.lastName} – Gerente',
-              style: const TextStyle(color: Colors.grey, fontSize: 16),
-            ),
-          ],
-        ),
-      ),
-      _drawerItem(Icons.person, 'PERFIL', () {
-        Navigator.push(
-            ctx,
-            MaterialPageRoute(
-                builder: (_) =>
-                    ProfileScreen(name: widget.name, lastName: widget.lastName)));
-      }),
-      _drawerItem(Icons.people, 'TRANSPORTISTAS', () {
-        Navigator.push(
-            ctx,
-            MaterialPageRoute(
-                builder: (_) => CarrierProfilesScreen(
-                    name: widget.name, lastName: widget.lastName)));
-      }),
-      _drawerItem(Icons.report, 'REPORTES', () {
-        Navigator.push(
-            ctx,
-            MaterialPageRoute(
-                builder: (_) =>
-                    ReportsScreen(name: widget.name, lastName: widget.lastName)));
-      }),
-      _drawerItem(Icons.directions_car, 'VEHÍCULOS', () {
-        Navigator.push(
-            ctx,
-            MaterialPageRoute(
-                builder: (_) =>
-                    VehiclesScreen(name: widget.name, lastName: widget.lastName)));
-      }),
-      _drawerItem(Icons.local_shipping, 'ENVIOS', () {
-        Navigator.push(
-            ctx,
-            MaterialPageRoute(
-                builder: (_) =>
-                    ShipmentsScreen(name: widget.name, lastName: widget.lastName)));
-      }),
-      const SizedBox(height: 160),
-      ListTile(
-        leading: const Icon(Icons.logout, color: Colors.white),
-        title:
-        const Text('CERRAR SESIÓN', style: TextStyle(color: Colors.white)),
-        onTap: () => Navigator.pushAndRemoveUntil(
-          ctx,
-          MaterialPageRoute(
-              builder: (_) => LoginScreen(
-                  onLoginClicked: (_, __) {}, onRegisterClicked: () {})),
-              (route) => false,
-        ),
-      ),
-    ]),
-  );
-
-  Widget _drawerItem(IconData icon, String title, VoidCallback onTap) => ListTile(
-    leading: Icon(icon, color: Colors.white),
-    title: Text(title, style: const TextStyle(color: Colors.white)),
-    onTap: onTap,
-  );
 }

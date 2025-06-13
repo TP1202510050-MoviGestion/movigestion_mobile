@@ -30,12 +30,18 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.2.2
+  http: ^0.13.6
   intl: ^0.17.0  # Añade esta línea
   image_picker: ^0.8.5+3 # Asegúrate de usar la versión más reciente
   file_picker: ^5.0.0  # Verifica que sea la última versión disponible
   url_launcher: ^6.1.10
-  path_provider: ^2.0.13
+  path_provider: ^2.1.1 # Usa la versión más reciente
+  open_filex: ^4.3.4    # Usa la versión más reciente
+  google_maps_flutter: ^2.5.0       # ↳ Android / iOS
+  google_maps_flutter_web: ^0.5.1   # ↳ Web (si compilas en web)
+  collection: ^1.17.2               # firstWhereOrNull, firstOrNull, etc.
+  geocoding: ^2.0.5      # ↖ para convertir direcciones en Lat/Lng
+  google_place: ^0.4.7        #  ←  LA VERSIÓN QUE EXISTE
 
 
 

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+
+// ----- IMPORTACIONES ORIGINALES (MANTENIDAS) -----
 import 'package:movigestion_mobile/core/app_constants.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_model.dart';
@@ -12,222 +14,279 @@ import 'package:movigestion_mobile/features/vehicle_management/presentation/page
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/vehicle/vehicles_screen.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
 
+import '../../../../../../core/widgets/app_drawer.dart';
+
 class ReportsScreen extends StatefulWidget {
   final String name;
   final String lastName;
 
   const ReportsScreen({
-    Key? key,
+    super.key,
     required this.name,
     required this.lastName,
-  }) : super(key: key);
+  });
 
   @override
-  _ReportsScreenState createState() => _ReportsScreenState();
+  State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
 class _ReportsScreenState extends State<ReportsScreen>
     with SingleTickerProviderStateMixin {
+  // --- Colores y Estilos ---
+  static const _primaryColor = Color(0xFFEA8E00);
+  static const _backgroundColor = Color(0xFF1E1F24);
+  static const _cardColor = Color(0xFF2C2F38);
+  static const _textColor = Colors.white;
+  static const _textMutedColor = Colors.white70;
+
+  // --- Estado de la UI ---
   final ReportService _reportService = ReportService();
-  final ProfileService _profileService = ProfileService();
-
-  late AnimationController _anim;
-  late Animation<double> _fade;
-
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
   bool _isLoading = true;
-  List<ReportModel> _all = [];
-  List<ReportModel> _filtered = [];
 
-  // Datos de la empresa del gerente
+  // --- Estado de Datos ---
+  List<ReportModel> _allReports = [];
+  List<ReportModel> _filteredReports = [];
   String _companyName = '';
-  String _companyRuc  = '';
+  String _companyRuc = '';
 
-  // filtros
+  // --- Estado de Filtros ---
   String? _filterType;
   String? _filterStatus;
-  String  _sortOrder = 'Recientes';
+  String _sortOrder = 'Recientes';
 
-  List<String> get _types {
-    final s = _all.map((r) => r.type).toSet().toList();
-    s.sort();
-    return s;
-  }
-  final List<String> _statuses    = ['Pendiente', 'En Proceso', 'Resuelto'];
+  // Opciones para los filtros
+  List<String> get _reportTypes =>
+      _allReports.map((r) => r.type).toSet().toList()..sort();
+  final List<String> _statuses = ['Pendiente', 'En Proceso', 'Resuelto'];
   final List<String> _dateOptions = ['Recientes', 'Antiguos'];
 
+  // --- Ciclo de Vida ---
   @override
   void initState() {
     super.initState();
-    _anim = AnimationController(
+    _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 500),
     );
-    _fade = CurvedAnimation(parent: _anim, curve: Curves.easeInOut);
+    _fadeAnimation =
+        CurvedAnimation(parent: _animationController, curve: Curves.easeInOut);
     _bootstrap();
   }
 
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  // --- Lógica de Datos ---
   Future<void> _bootstrap() async {
     setState(() => _isLoading = true);
     await _fetchManagerData();
     await _fetchReports();
-    setState(() => _isLoading = false);
-    _anim.forward();
+    if (mounted) {
+      setState(() => _isLoading = false);
+      _animationController.forward();
+    }
   }
 
   Future<void> _fetchManagerData() async {
     try {
-      final res = await http.get(Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}'));
+      final res = await http
+          .get(Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}'));
       if (res.statusCode == 200) {
-        final list = json.decode(res.body) as List;
+        // 1. Tomamos los bytes crudos de la respuesta (sin decodificar).
+        var responseBytes = res.bodyBytes;
+
+        // 2. Decodificamos los bytes forzando el formato UTF-8.
+        var decodedBody = utf8.decode(responseBytes);
+
+        // 3. Ahora usamos el texto ya corregido con json.decode.
+        final list = json.decode(decodedBody) as List;
         final gerente = list.firstWhere(
               (e) =>
-          e['name'].toString().toLowerCase()     == widget.name.toLowerCase() &&
-              e['lastName'].toString().toLowerCase() == widget.lastName.toLowerCase(),
+          e['name'].toString().toLowerCase() == widget.name.toLowerCase() &&
+              e['lastName'].toString().toLowerCase() ==
+                  widget.lastName.toLowerCase(),
           orElse: () => null,
         );
         if (gerente != null) {
           _companyName = gerente['companyName'] ?? '';
-          _companyRuc  = gerente['companyRuc']  ?? '';
+          _companyRuc = gerente['companyRuc'] ?? '';
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      // Manejo de error silencioso como en el original
+    }
   }
 
   Future<void> _fetchReports() async {
     try {
       final all = await _reportService.getAllReports();
-      // Filtramos solo los de la misma empresa:
-      _all = all.where((r) =>
-      r.companyName == _companyName &&
-          r.companyRuc  == _companyRuc
-      ).toList();
+      _allReports = all
+          .where((r) =>
+      r.companyName == _companyName && r.companyRuc == _companyRuc)
+          .toList();
       _applyFilters();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al cargar reportes: $e')),
       );
-      setState(() => _filtered = []);
+      setState(() => _filteredReports = []);
     }
   }
 
   void _applyFilters() {
-    var list = List<ReportModel>.from(_all);
-    if (_filterType   != null) list = list.where((r) => r.type   == _filterType).toList();
-    if (_filterStatus != null) list = list.where((r) => r.status == _filterStatus).toList();
+    var list = List<ReportModel>.from(_allReports);
+    if (_filterType != null) {
+      list = list.where((r) => r.type == _filterType).toList();
+    }
+    if (_filterStatus != null) {
+      list = list.where((r) => r.status == _filterStatus).toList();
+    }
     list.sort((a, b) {
       final cmp = a.createdAt.compareTo(b.createdAt);
       return _sortOrder == 'Recientes' ? -cmp : cmp;
     });
-    setState(() => _filtered = list);
+    setState(() => _filteredReports = list);
   }
 
-  void _showFilterModal() {
-    String? tmpType    = _filterType;
-    String? tmpStatus  = _filterStatus;
-    String  tmpOrder   = _sortOrder;
+  // --- Constructores de UI ---
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _backgroundColor,
+      appBar: _buildAppBar(),
+      drawer: AppDrawer(name: widget.name, lastName: widget.lastName),
+      body: _buildBody(),
+    );
+  }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        maxChildSize: 0.8,
-        builder: (c, scroll) => Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF2C2F38),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: ListView(
-            controller: scroll,
+  AppBar _buildAppBar() {
+    return AppBar(
+      backgroundColor: _cardColor,
+      title: const Row(
+        children: [
+          Icon(Icons.assessment_outlined, color: _primaryColor),
+          SizedBox(width: 12),
+          Text('Reportes', style: TextStyle(color: _textColor)),
+        ],
+      ),
+      actions: [
+        IconButton(
+          tooltip: 'Filtrar reportes',
+          icon: const Icon(Icons.filter_list, color: _textColor),
+          onPressed: _isLoading ? null : _showFilterModal,
+        ),
+      ],
+      elevation: 0,
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: _primaryColor));
+    }
+    if (_filteredReports.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, color: _textMutedColor, size: 80),
+            SizedBox(height: 16),
+            Text(
+              'No se encontraron reportes',
+              style: TextStyle(color: _textMutedColor, fontSize: 18),
+            ),
+            Text(
+              'Prueba a cambiar los filtros o vuelve más tarde.',
+              style: TextStyle(color: _textMutedColor),
+            ),
+          ],
+        ),
+      );
+    }
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _filteredReports.length,
+        itemBuilder: (ctx, i) => _buildReportCard(_filteredReports[i]),
+      ),
+    );
+  }
+
+  /// Construye la tarjeta visual para un reporte individual.
+  Widget _buildReportCard(ReportModel report) {
+    return Card(
+      color: _cardColor,
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          final changed = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ReportDetailScreen(
+                  name: widget.name, lastName: widget.lastName, report: report),
+            ),
+          );
+          if (changed == true) {
+            _fetchReports();
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: _primaryColor.withOpacity(0.15),
+                child: Icon(_getIconForReportType(report.type),
+                    color: _primaryColor, size: 26),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      report.type,
+                      style: const TextStyle(
+                          color: _textColor,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Reportado por: ${report.driverName}',
+                      style: const TextStyle(color: _textMutedColor, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.calendar_today,
+                            size: 12, color: _textMutedColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${report.createdAt.toLocal()}'.split(' ')[0], // Solo la fecha
+                          style:
+                          const TextStyle(fontSize: 12, color: _textMutedColor),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const Text(
-                'Filtrar por...',
-                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 24),
-
-              // Tipo
-              const Text('Tipo', style: TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                children: [null, ..._types].map((t) {
-                  return ChoiceChip(
-                    label: Text(t ?? 'Todos'),
-                    selected: tmpType == t,
-                    onSelected: (_) => setState(() => tmpType = t),
-                    selectedColor: Colors.amber,
-                    backgroundColor: Colors.white10,
-                    labelStyle: TextStyle(color: tmpType == t ? Colors.black : Colors.grey),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-
-              // Estado
-              const Text('Estado', style: TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                children: [null, ..._statuses].map((s) {
-                  return ChoiceChip(
-                    label: Text(s ?? 'Todos'),
-                    selected: tmpStatus == s,
-                    onSelected: (_) => setState(() => tmpStatus = s),
-                    selectedColor: Colors.amber,
-                    backgroundColor: Colors.white10,
-                    labelStyle: TextStyle(color: tmpStatus == s ? Colors.black : Colors.grey),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-
-              // Fecha
-              const Text('Ordenar por fecha', style: TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: _dateOptions.map((o) {
-                  return ChoiceChip(
-                    label: Text(o),
-                    selected: tmpOrder == o,
-                    onSelected: (_) => setState(() => tmpOrder = o),
-                    selectedColor: Colors.amber,
-                    backgroundColor: Colors.white10,
-                    labelStyle: TextStyle(color: tmpOrder == o ? Colors.black : Colors.grey),
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: () {
-                  _filterType   = tmpType;
-                  _filterStatus = tmpStatus;
-                  _sortOrder    = tmpOrder;
-                  _applyFilters();
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.amber,
-                  minimumSize: const Size.fromHeight(50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Aplicar filtros', style: TextStyle(color: Colors.black, fontSize: 16)),
-              ),
+              const SizedBox(width: 12),
+              _buildStatusBadge(report.status),
             ],
           ),
         ),
@@ -235,163 +294,183 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
-  Widget _buildCard(ReportModel r) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(colors: [Colors.amber.shade400, Colors.amber.shade700]),
+  /// Devuelve un ícono basado en el tipo de reporte.
+  IconData _getIconForReportType(String type) {
+    switch (type.toLowerCase()) {
+      case 'accidente':
+        return Icons.car_crash_outlined;
+      case 'mantenimiento preventivo':
+        return Icons.build_outlined;
+      case 'falla mecánica':
+        return Icons.settings_outlined;
+      case 'problema de llantas':
+        return Icons.tire_repair_outlined;
+      default:
+        return Icons.report_problem_outlined;
+    }
+  }
+
+  /// Construye una "insignia" de color para el estado del reporte.
+  Widget _buildStatusBadge(String status) {
+    Color badgeColor;
+    switch (status) {
+      case 'Pendiente':
+        badgeColor = Colors.orange.shade700;
+        break;
+      case 'En Proceso':
+        badgeColor = Colors.blue.shade700;
+        break;
+      case 'Resuelto':
+        badgeColor = Colors.green.shade700;
+        break;
+      default:
+        badgeColor = Colors.grey.shade700;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: badgeColor, width: 1),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(
+            color: badgeColor, fontSize: 11, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  /// Muestra el modal de filtros.
+  /// Usa StatefulBuilder para evitar reconstruir toda la pantalla al cambiar filtros.
+  void _showFilterModal() {
+    String? tempType = _filterType;
+    String? tempStatus = _filterStatus;
+    String tempOrder = _sortOrder;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter modalSetState) {
+          return DraggableScrollableSheet(
+            initialChildSize: 0.6,
+            maxChildSize: 0.8,
+            builder: (_, scrollController) => Container(
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(
+                color: _cardColor,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-              padding: const EdgeInsets.all(8),
-              child: const Icon(Icons.report, color: Colors.black),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(r.driverName,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(r.type, style: const TextStyle(fontSize: 14)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today, size: 14, color: Colors.black54),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${r.createdAt.toLocal()}'.split('.')[0],
-                        style: const TextStyle(fontSize: 12, color: Colors.black54),
-                      ),
-                    ],
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2)),
+                  ),
+                  const Text('Filtrar y Ordenar',
+                      style: TextStyle(
+                          color: _textColor,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 24),
+                  Expanded(
+                    child: ListView(
+                      controller: scrollController,
+                      children: [
+                        _buildFilterSection(
+                          'Tipo de Reporte',
+                          [null, ..._reportTypes],
+                          tempType,
+                              (value) => modalSetState(() => tempType = value),
+                        ),
+                        _buildFilterSection(
+                          'Estado',
+                          [null, ..._statuses],
+                          tempStatus,
+                              (value) => modalSetState(() => tempStatus = value),
+                        ),
+                        _buildFilterSection(
+                          'Ordenar por Fecha',
+                          _dateOptions,
+                          tempOrder,
+                              (value) => modalSetState(() => tempOrder = value!),
+                          isExclusive: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () {
+                      _filterType = tempType;
+                      _filterStatus = tempStatus;
+                      _sortOrder = tempOrder;
+                      _applyFilters();
+                      Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryColor,
+                      minimumSize: const Size.fromHeight(50),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Aplicar Filtros',
+                        style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade100,
-                borderRadius: BorderRadius.circular(12),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFilterSection(String title, List<String?> options,
+      String? selectedValue, ValueChanged<String?> onSelected,
+      {bool isExclusive = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(color: _textMutedColor, fontSize: 16)),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options.map((option) {
+            final isSelected = selectedValue == option;
+            return ChoiceChip(
+              label: Text(option ?? 'Todos'),
+              selected: isSelected,
+              onSelected: (_) => onSelected(isExclusive ? option : (isSelected ? null : option)),
+              backgroundColor: _backgroundColor,
+              selectedColor: _primaryColor,
+              labelStyle: TextStyle(
+                color: isSelected ? Colors.black : _textMutedColor,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
-              child: Text(r.status, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-            ),
-          ],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(
+                    color: isSelected ? _primaryColor : Colors.white24),
+              ),
+            );
+          }).toList(),
         ),
-      ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF2C2F38),
-        title: Row(
-          children: [
-            const Icon(Icons.report, color: Colors.amber),
-            const SizedBox(width: 10),
-            Text(
-              'Reportes',
-              style: TextStyle(color: Colors.grey, fontSize: 22, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list, color: Colors.white),
-            onPressed: _showFilterModal,
-          )
-        ],
-      ),
-      backgroundColor: const Color(0xFF1E1F24),
-      drawer: _buildDrawer(context),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.amber, strokeWidth: 3))
-          : _filtered.isEmpty
-          ? const Center(
-        child: Text(
-          'No hay reportes disponibles',
-          style: TextStyle(color: Colors.white70),
-        ),
-      )
-          : FadeTransition(
-        opacity: _fade,
-        child: ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: _filtered.length,
-          itemBuilder: (ctx, i) => InkWell(
-            onTap: () async {
-              final changed = await Navigator.push(
-                ctx,
-                MaterialPageRoute(
-                  builder: (_) => ReportDetailScreen(name: widget.name, lastName: widget.lastName,report: _filtered[i]),
-                ),
-              );
-              // si eliminó o resolvió, refrescamos la lista
-              if (changed == true) _fetchReports();
-            },
-            child: _buildCard(_filtered[i]),
-          ),
-        ),
-      ),
-    );
-  }
 
-  Drawer _buildDrawer(BuildContext ctx) => Drawer(
-    backgroundColor: const Color(0xFF2C2F38),
-    child: ListView(padding: EdgeInsets.zero, children: [
-      DrawerHeader(
-        child: Column(
-          children: [
-            Image.asset('assets/images/login_logo.png', height: 100),
-            const SizedBox(height: 10),
-            Text(
-              '${widget.name} ${widget.lastName} - Gerente',
-              style: const TextStyle(color: Colors.grey, fontSize: 16),
-            ),
-          ],
-        ),
-      ),
-      _drawerItem(Icons.person, 'PERFIL',
-              () => Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
-              ProfileScreen(name: widget.name, lastName: widget.lastName)))),
-      _drawerItem(Icons.people, 'TRANSPORTISTAS',
-              () => Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
-              CarrierProfilesScreen(name: widget.name, lastName: widget.lastName)))),
-      _drawerItem(Icons.report, 'REPORTES',
-              () => Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
-              ReportsScreen(name: widget.name, lastName: widget.lastName)))),
-      _drawerItem(Icons.directions_car, 'VEHÍCULOS',
-              () => Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
-              VehiclesScreen(name: widget.name, lastName: widget.lastName)))),
-      _drawerItem(Icons.local_shipping, 'ENVIOS',
-              () => Navigator.push(ctx, MaterialPageRoute(builder: (_) =>
-              ShipmentsScreen(name: widget.name, lastName: widget.lastName)))),
-      const SizedBox(height: 160),
-      ListTile(
-        leading: const Icon(Icons.logout, color: Colors.white),
-        title: const Text('CERRAR SESIÓN', style: TextStyle(color: Colors.white)),
-        onTap: () => Navigator.pushAndRemoveUntil(
-          ctx,
-          MaterialPageRoute(builder: (_) => LoginScreen(onLoginClicked: (_, __) {}, onRegisterClicked: () {})),
-              (route) => false,
-        ),
-      ),
-    ]),
-  );
-
-  Widget _drawerItem(IconData icon, String title, VoidCallback onTap) =>
-      ListTile(
-        leading: Icon(icon, color: Colors.white),
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        onTap: onTap,
-      );
 }

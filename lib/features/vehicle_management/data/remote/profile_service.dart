@@ -1,97 +1,116 @@
 import 'dart:convert';
+import 'package:collection/collection.dart';               // 👈 new
 import 'package:http/http.dart' as http;
 import 'package:movigestion_mobile/core/app_constants.dart';
 import 'profile_model.dart';
 
 class ProfileService {
-  /// LOGIN / FETCH (sigue usando email+password)
-  Future<ProfileModel?> getProfileByEmailAndPassword(String email, String password) async {
-    final url = Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}/email/$email/password/$password');
+  /* ------------------------------------------------------------------ */
+  /*                          ///  GET-BY-EMAIL                         */
+  /* ------------------------------------------------------------------ */
+  Future<ProfileModel?> getProfileByEmailAndPassword(
+      String email, String password) async {
+    final url = Uri.parse(
+        '${AppConstants.baseUrl}${AppConstants.profile}/email/$email/password/$password');
+
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
         return ProfileModel.fromJson(json.decode(response.body));
-      } else {
-        print('Failed to fetch profile. Status code: ${response.statusCode}');
-        print('Response body: ${response.body}');
-        return null;
       }
+      print('[ProfileSvc] status ${response.statusCode}: ${response.body}');
+      return null;
     } catch (e) {
-      print('Error al realizar la solicitud: $e');
+      print('[ProfileSvc] error getProfileByEmailAndPassword: $e');
       return null;
     }
   }
 
-  /// TRAER TODOS y luego filtrar por name/lastName
-  Future<ProfileModel?> getProfileByNameAndLastName(String name, String lastName) async {
-    final url = Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}');
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final List<dynamic> list = json.decode(response.body);
-        final match = list.firstWhere(
-              (p) => p['name'] == name && p['lastName'] == lastName,
-          orElse: () => null,
-        );
-        return match != null ? ProfileModel.fromJson(match) : null;
-      } else {
-        print('Failed to fetch profiles. Status code: ${response.statusCode}');
-        return null;
-      }
-    } catch (e) {
-      print('Error al realizar la solicitud: $e');
-      return null;
-    }
+  /* ------------------------------------------------------------------ */
+  /*                       ///  GET BY NAME + LASTNAME                   */
+  /* ------------------------------------------------------------------ */
+  Future<ProfileModel?> getProfileByNameAndLastName(
+      String name, String lastName) async {
+    final list = await _getAllProfiles();
+    return list.firstWhereOrNull(
+          (p) =>
+      p.name.toLowerCase().trim() == name.toLowerCase().trim() &&
+          p.lastName.toLowerCase().trim() == lastName.toLowerCase().trim(),
+    );
   }
 
-  /// PUT general: /api/profiles/{id}
+  /* ------------------------------------------------------------------ */
+  /*                       ///  GET ALL CARRIERS (TRANSPORTISTAS)        */
+  /* ------------------------------------------------------------------ */
+  Future<List<ProfileModel>> getAllCarriers() async {
+    final list = await _getAllProfiles();
+    return list.where((p) => p.type == 'Transportista').toList();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*                           ///  UPDATE PROFILE                      */
+  /* ------------------------------------------------------------------ */
   Future<bool> updateProfile(ProfileModel profile) async {
-    final url = Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}/${profile.id}');
+    final url =
+    Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}/${profile.id}');
     try {
       final response = await http.put(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode(profile.toUpdateJson()),
       );
-      if (response.statusCode == 200) {
-        print('Perfil actualizado exitosamente');
-        return true;
-      } else {
-        print('Error al actualizar perfil. Status: ${response.statusCode}');
-        print('Body: ${response.body}');
-        return false;
+      final ok = response.statusCode == 200;
+      if (!ok) {
+        print('[ProfileSvc] update failed (${response.statusCode}) → ${response.body}');
       }
+      return ok;
     } catch (e) {
-      print('Error al enviar PUT: $e');
+      print('[ProfileSvc] updateProfile error: $e');
       return false;
     }
   }
 
-  /// PATCH contraseña: /api/profiles/password
+  /* ------------------------------------------------------------------ */
+  /*                           ///  CHANGE PASSWORD                     */
+  /* ------------------------------------------------------------------ */
   Future<bool> changePassword(
       String email, String oldPassword, String newPassword) async {
-    final url = Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}/password');
+    final url =
+    Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}/password');
     try {
       final response = await http.patch(
         url,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'email': email,
+          'email'      : email,
           'oldPassword': oldPassword,
           'newPassword': newPassword,
         }),
       );
-      if (response.statusCode == 200) {
-        print('Contraseña cambiada correctamente');
-        return true;
-      } else {
-        print('Error al cambiar contraseña. Status: ${response.statusCode}');
-        print('Body: ${response.body}');
-        return false;
+      final ok = response.statusCode == 200;
+      if (!ok) {
+        print('[ProfileSvc] changePwd failed (${response.statusCode}) → ${response.body}');
       }
+      return ok;
     } catch (e) {
-      print('Error en PATCH password: $e');
+      print('[ProfileSvc] changePassword error: $e');
       return false;
     }
+  }
+
+  /* ================================================================== */
+  /*                          PRIVATE HELPERS                           */
+  /* ================================================================== */
+  Future<List<ProfileModel>> _getAllProfiles() async {
+    final url = Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}');
+    final response = await http.get(url);
+    if (response.statusCode == 200) {
+      final List<dynamic> raw = json.decode(response.body);
+      return raw
+          .map((e) => ProfileModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    throw Exception(
+        '[ProfileSvc] getAllProfiles failed (${response.statusCode})');
   }
 }

@@ -1,28 +1,26 @@
-import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_model.dart';
+import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
 
 class ProfileRepository {
-  final ProfileService profileService;
+  final ProfileService _svc;
 
-  ProfileRepository({required this.profileService});
+  ProfileRepository({required ProfileService profileService})
+      : _svc = profileService;
 
-  Future<ProfileModel?> login(String email, String password) {
-    return profileService.getProfileByEmailAndPassword(email, password);
-  }
+  /* ---------- Auth ---------- */
+  Future<ProfileModel?> login(String email, String password) =>
+      _svc.getProfileByEmailAndPassword(email, password);
 
-  Future<ProfileModel?> findByNameAndLastName(String name, String lastName) {
-    return profileService.getProfileByNameAndLastName(name, lastName);
-  }
+  /* ---------- Lookup ---------- */
+  Future<ProfileModel?> findByNameAndLastName(String n, String ln) =>
+      _svc.getProfileByNameAndLastName(n, ln);
 
-  Future<bool> update(ProfileModel profile) {
-    return profileService.updateProfile(profile);
-  }
+  Future<List<ProfileModel>> getAllCarriers() => _svc.getAllCarriers();
+
+  /* ---------- Update ---------- */
+  Future<bool> update(ProfileModel p) => _svc.updateProfile(p);
 
   Future<bool> changePassword(
-      String email,
-      String oldPassword,
-      String newPassword,
-      ) {
-    return profileService.changePassword(email, oldPassword, newPassword);
-  }
+      String email, String oldPwd, String newPwd) =>
+      _svc.changePassword(email, oldPwd, newPwd);
 }

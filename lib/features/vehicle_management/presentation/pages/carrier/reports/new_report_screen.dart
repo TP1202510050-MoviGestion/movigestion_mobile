@@ -11,6 +11,8 @@ import 'package:movigestion_mobile/features/vehicle_management/presentation/page
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/profile/profile_screen2.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
 
+import '../../../../../../core/widgets/app_drawer2.dart';
+
 class NewReportScreen extends StatefulWidget {
   final String name;
   final String lastName;
@@ -216,7 +218,7 @@ class _NewReportScreenState extends State<NewReportScreen>
         ),
       ),
       backgroundColor: const Color(0xFF1A1F24),
-      drawer: _buildDrawer(context),
+      drawer: AppDrawer2(name: widget.name, lastName: widget.lastName),
       body: FadeTransition(
         opacity: _animationController,
         child: Padding(
@@ -376,7 +378,7 @@ class _NewReportScreenState extends State<NewReportScreen>
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => VehicleDetailCarrierScreenScreen(
+              builder: (_) => VehicleDetailCarrierScreen(
                 name: widget.name,
                 lastName: widget.lastName,
               ),

@@ -8,6 +8,8 @@ import 'package:movigestion_mobile/features/vehicle_management/presentation/page
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/profile/profile_screen2.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
 
+import '../../../../../../core/widgets/app_drawer2.dart';
+
 class ShipmentsScreen2 extends StatefulWidget {
   final String name;
   final String lastName;
@@ -162,7 +164,7 @@ class _ShipmentsScreen2State extends State<ShipmentsScreen2> with SingleTickerPr
         ),
       ),
       backgroundColor: const Color(0xFF1A1F24),
-      drawer: _buildDrawer(),
+      drawer: AppDrawer2(name: widget.name, lastName: widget.lastName),
       body: _isLoading
           ? const Center(
         child: CircularProgressIndicator(
@@ -322,7 +324,7 @@ class _ShipmentsScreen2State extends State<ShipmentsScreen2> with SingleTickerPr
           ),
           _buildDrawerItem(Icons.person, 'PERFIL', ProfileScreen2(name: widget.name, lastName: widget.lastName)),
           _buildDrawerItem(Icons.report, 'REPORTES', ReportsCarrierScreen(name: widget.name, lastName: widget.lastName)),
-          _buildDrawerItem(Icons.directions_car, 'VEHICULOS', VehicleDetailCarrierScreenScreen(name: widget.name, lastName: widget.lastName)),
+          _buildDrawerItem(Icons.directions_car, 'VEHICULOS', VehicleDetailCarrierScreen(name: widget.name, lastName: widget.lastName)),
           _buildDrawerItem(Icons.local_shipping, 'ENVIOS', ShipmentsScreen2(name: widget.name, lastName: widget.lastName)),
           const SizedBox(height: 160),
           ListTile(

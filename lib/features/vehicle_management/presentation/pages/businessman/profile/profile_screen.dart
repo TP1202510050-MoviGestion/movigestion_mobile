@@ -7,6 +7,7 @@ import 'package:movigestion_mobile/features/vehicle_management/data/remote/profi
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_model.dart'; // ← nuevo
 import 'package:movigestion_mobile/core/app_constants.dart';
 
+import '../../../../../../core/widgets/app_drawer.dart';
 import '../reports/reports_screen.dart';
 import '../vehicle/vehicles_screen.dart';
 import '../shipments/shipments_screen.dart';
@@ -78,7 +79,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF1E1F24),
       appBar: _appBar(),
-      drawer: _buildDrawer(context),
+      drawer: AppDrawer(name: widget.name, lastName: widget.lastName),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFEA8E00)))
           : _body(),
