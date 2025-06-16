@@ -1,18 +1,20 @@
 // lib/features/route_management/presentation/pages/businessman/route/assign_route_screen.dart
-/* -------------------------------------------------------------- */
-/*                     PANTALLA: ALTA DE RUTA                     */
-/* -------------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+//            PANTALLA  ▸  CREAR / ASIGNAR RUTA
+// -----------------------------------------------------------------------------
+
 import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_place/google_place.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 
 import '../../../../../../../../core/widgets/app_drawer.dart';
-// 🔑 6 niveles arriba hasta lib/, luego core/
-import '../../../../../../../../core/google_maps_config.dart';
-
+import '../../../../../../../../core/google_maps_config.dart'
+    show kMapsApiKey, googlePlace;
 
 import '../../../../data/remote/profile_service.dart';
 import '../../../../data/remote/route_model.dart';
@@ -20,432 +22,612 @@ import '../../../../data/remote/route_service.dart';
 import '../../../../data/remote/vehicle_model.dart';
 import '../../../../data/remote/vehicle_service.dart';
 
-/* ---------- Constantes visuales ---------- */
-const _kBg       = Color(0xFF1E1F24);
-const _kCard     = Color(0xFF2F353F);
-const _kBar      = Color(0xFF2C2F38);
-const _kAction   = Color(0xFFEA8E00);
+/* -------------------  Estilos  ------------------- */
+const _kBg = Color(0xFF1E1F24);
+const _kCard = Color(0xFF2F353F);
+const _kBar = Color(0xFF2C2F38);
+const _kAction = Color(0xFFEA8E00);
 const _kTextMain = Colors.white;
-const _kTextSub  = Colors.white70;
-const _kRadius   = 12.0;
+const _kTextSub = Colors.white70;
+const _kRadius = 12.0;
 
-class AssignRouteScreen extends StatefulWidget {
-  final String name;
-  final String lastName;
-  const AssignRouteScreen({super.key, required this.name, required this.lastName});
+/* =========================================================================== */
+/*                              VIEW-MODEL LIGERO                              */
+/* =========================================================================== */
+class _RouteVM with ChangeNotifier {
+  _RouteVM(this.profileSvc, this.vehicleSvc);
 
-  @override
-  State<AssignRouteScreen> createState() => _AssignRouteScreenState();
-}
+  final ProfileService profileSvc;
+  final VehicleService vehicleSvc;
+  final DateFormat fmtTime = DateFormat('HH:mm');
 
-class _AssignRouteScreenState extends State<AssignRouteScreen> {
-  /* -------- servicios -------- */
-  final _routeSvc   = RouteService();
-  final _profileSvc = ProfileService();
-  final _vehicleSvc = VehicleService();
+  bool loading = true;
+  String? error;
 
-  /* -------- form & utils -------- */
-  final _formKey = GlobalKey<FormState>();
-  final _fmtTime = DateFormat('HH:mm');
+  String companyName = '';
+  String companyRuc = '';
 
-  /* -------- controllers -------- */
-  final _customerC   = TextEditingController();
-  final _shiftC      = TextEditingController();
-  final _departureC  = TextEditingController();   // hora salida
-  final _arrivalC    = TextEditingController();   // hora llegada
+  final List<Map<String, dynamic>> carriers = [];
+  final Map<int, VehicleModel> _vehicleByDriver = {};
 
-  // Dirección inicio / destino
-  final _startC      = TextEditingController();
-  final _endC        = TextEditingController();
-  // Paradas dinámicas
-  final List<TextEditingController> _stopCs = [];
+  Future<void> bootstrap(String n, String l) async {
+    try {
+      loading = true;
+      notifyListeners();
 
-  /* -------- selección & estado -------- */
-  String? _type;           // regular, reten, express, evento, mantenimiento
-  String? _driverName;
-  int?    _driverId;
-  int?    _vehicleId;
-  String? _vehiclePlate;
+      final results = await Future.wait([
+        profileSvc.getProfileByNameAndLastName(n, l),
+        profileSvc.getAllCarriers(),
+        vehicleSvc.getAllVehicles(),
+      ]);
 
-  /* -------- empresa del creador -------- */
-  String _companyName = '';
-  String _companyRuc  = '';
+      final prof = results[0] as dynamic;      // o ProfileModel? si prefieres tipar
 
-  /* -------- transportistas dropdown -------- */
-  List<Map<String, dynamic>> _transportistas = []; // {id, fullName}
+      companyName = prof?.companyName ?? '';
+      companyRuc  = prof?.companyRuc  ?? '';
 
-  /* -------- coordenadas elegidas -------- */
-  final Map<TextEditingController, LatLng> _coords = {}; // controller → LatLng
+      final cList = results[1] as List<dynamic>;
+      carriers
+        ..clear()
+        ..addAll(cList.map((p) => {
+          'id': p.id,
+          'name': '${p.name} ${p.lastName}',
+        }));
 
-  /* -------- mapa -------- */
-  GoogleMapController? _mapCtrl;
-  final List<LatLng> _polylinePoints = [];
-
-  /* ============================ INIT ============================ */
-  @override
-  void initState() {
-    super.initState();
-    _loadProfileAndDrivers();
-  }
-
-  Future<void> _loadProfileAndDrivers() async {
-    /* creador */
-    final creator =
-    await _profileSvc.getProfileByNameAndLastName(widget.name, widget.lastName);
-    _companyName = creator?.companyName ?? '';
-    _companyRuc  = creator?.companyRuc  ?? '';
-
-    /* transportistas */
-    final carriers = await _profileSvc.getAllCarriers();
-    setState(() {
-      _transportistas = carriers
-          .map((p) => {'id': p.id, 'fullName': '${p.name} ${p.lastName}'})
-          .toList();
-    });
-  }
-
-  /* ============================ TIME PICKER ============================ */
-  Future<void> _pickTime(TextEditingController ctl) async {
-    final now = TimeOfDay.now();
-    final picked = await showTimePicker(context: context, initialTime: now);
-    if (picked != null) {
-      final dt = DateTime(2000, 1, 1, picked.hour, picked.minute);
-      ctl.text = _fmtTime.format(dt);
+      for (final v in (results[2] as List<VehicleModel>)) {
+        if (v.assignedDriverId != null) {
+          _vehicleByDriver[v.assignedDriverId!] = v;
+        }
+      }
+      error = null;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      loading = false;
+      notifyListeners();
     }
   }
 
-  /* ============================ DRIVER SELECTION ============================ */
-  Future<void> _onDriverSelected(String? fullName) async {
-    if (fullName == null) return;
-    setState(() => _driverName = fullName);
+  VehicleModel? vehicleForDriver(int id) => _vehicleByDriver[id];
+}
 
-    final prof = _transportistas.firstWhere((e) => e['fullName'] == fullName);
-    _driverId = prof['id'] as int;
+/* =========================================================================== */
+/*                     MODELO PARA CADA PUNTO / PARADA                         */
+/* =========================================================================== */
+class StopPoint {
+  StopPoint(this.label) {
+    controller = TextEditingController();
+  }
+  final String label;
+  late final TextEditingController controller;
+  LatLng? latLng;
+  void dispose() => controller.dispose();
+}
 
-    final vehicles = await _vehicleSvc.getAllVehicles();
-    final VehicleModel? veh = vehicles.firstWhereOrNull(
-          (v) => v.driverName.toLowerCase().trim() == fullName.toLowerCase().trim(),
+/* =========================================================================== */
+/*                              WIDGET PRINCIPAL                               */
+/* =========================================================================== */
+class AssignRouteScreen extends StatelessWidget {
+  final String name;
+  final String lastName;
+  const AssignRouteScreen(
+      {super.key, required this.name, required this.lastName});
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) =>
+      _RouteVM(ProfileService(), VehicleService())..bootstrap(name, lastName),
+      child: _AssignRouteBody(userName: name, userLastName: lastName),
     );
+  }
+}
 
-    setState(() {
-      _vehicleId    = veh?.id;
-      _vehiclePlate = veh?.licensePlate;
-    });
+class _AssignRouteBody extends StatefulWidget {
+  final String userName, userLastName;
+  const _AssignRouteBody(
+      {required this.userName, required this.userLastName});
+
+  @override
+  State<_AssignRouteBody> createState() => _AssignRouteBodyState();
+}
+
+class _AssignRouteBodyState extends State<_AssignRouteBody> {
+/* ──────────────────────── Controllers ──────────────────────── */
+  final _formKey = GlobalKey<FormState>();
+  final _customerC = TextEditingController();
+  final _shiftC = TextEditingController();
+  final _depC = TextEditingController();
+  final _arrC = TextEditingController();
+
+  final _start = StopPoint('Inicio');
+  final _end = StopPoint('Destino');
+  final List<StopPoint> _stops = [];
+
+  String? _routeType;
+  int? _driverId;
+  String? _driverName;
+  VehicleModel? _vehicle;
+
+/* ──────────────────────── Mapa ──────────────────────── */
+  GoogleMapController? _mapCtrl;
+  final Set<Marker> _markers = {};
+  final List<LatLng> _polyline = [];
+
+/* ──────────────────────── Debounce helpers ──────────────────────── */
+  Timer? _debouncer;
+  void _debounce(VoidCallback cb, [int ms = 350]) {
+    _debouncer?.cancel();
+    _debouncer = Timer(Duration(milliseconds: ms), cb);
   }
 
-  /* ============================ AUTOCOMPLETE ============================ */
-  Future<void> _showAddressAutocomplete(TextEditingController ctl) async {
-    final predictions = await googlePlace.autocomplete.get(
-      ctl.text,
+/* ──────────────────────── UI utils ──────────────────────── */
+  InputDecoration _dec(String l, [IconData? ic]) => InputDecoration(
+    labelText: l,
+    labelStyle: const TextStyle(color: _kTextSub),
+    filled: true,
+    fillColor: _kCard,
+    suffixIcon: ic == null ? null : Icon(ic, color: _kAction),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(_kRadius),
+      borderSide: BorderSide.none,
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(_kRadius),
+      borderSide: const BorderSide(color: _kAction),
+    ),
+  );
+
+  Future<void> _pickTime(TextEditingController c) async {
+    final now = TimeOfDay.now();
+    final picked = await showTimePicker(context: context, initialTime: now);
+    if (picked != null) {
+      final vm = context.read<_RouteVM>();
+      c.text = vm.fmtTime
+          .format(DateTime(2000, 1, 1, picked.hour, picked.minute));
+    }
+  }
+
+/* ────────────────────────  AUTOCOMPLETE  ──────────────────────── */
+
+// quitamos genérico para evitar error del compilador
+  final _acKey = GlobalKey();
+  /// Debouncer que **devuelve** el `Future<Iterable<>>` exigido
+  Completer<Iterable<AutocompletePrediction>>? _searchCompleter;
+  Timer? _searchTimer;
+  Future<List<AutocompletePrediction>> _searchPlaces(String q) async {
+    if (q.trim().isEmpty) return [];       //  <-- añade esta línea
+    final res = await googlePlace.autocomplete.get(
+      q,
       components: [Component('country', 'pe')],
       language: 'es',
       types: 'geocode',
     );
+    return res?.predictions ?? [];
+  }
 
-    if (predictions == null || predictions.predictions == null) return;
-    final list = predictions.predictions!;
-
-    final String? chosen = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: _kCard,
-      isScrollControlled: true,
-      builder: (_) => ListView(
-        padding: const EdgeInsets.only(top: 16),
-        children: list
-            .map(
-              (p) => ListTile(
-            title: Text(p.description ?? '',
-                style: const TextStyle(color: _kTextMain)),
-            onTap: () => Navigator.pop(context, p.placeId),
-          ),
-        )
-            .toList(),
-      ),
-    );
-
-    if (chosen == null) return;
-
-    final details = await googlePlace.details.get(chosen);
-    final loc = details?.result?.geometry?.location;
+  Future<void> _selectPrediction(
+      StopPoint p, AutocompletePrediction choice) async {
+    final det = await googlePlace.details.get(choice.placeId!);
+    final loc = det?.result?.geometry?.location;
     if (loc == null) return;
-
     setState(() {
-      ctl.text = details?.result?.formattedAddress ?? ctl.text;
-      _coords[ctl] = LatLng(loc.lat ?? 0, loc.lng ?? 0);
-
-      _rebuildPolyline();
+      p.controller.text =
+          det?.result?.formattedAddress ?? choice.description ?? '';
+      p.latLng = LatLng(loc.lat!, loc.lng!);
+      _refreshRoute();
     });
   }
 
-  void _rebuildPolyline() {
-    _polylinePoints
-      ..clear()
-      ..addAll(_orderedCoords());
+/* ────────────────────────  Paradas  ──────────────────────── */
+  void _addStop() => setState(
+          () => _stops.add(StopPoint('Parada ${_stops.length + 1}')));
+
+  void _removeStop(StopPoint p) {
+    setState(() {
+      p.dispose();
+      _stops.remove(p);
+      _refreshRoute();
+    });
   }
 
-  List<LatLng> _orderedCoords() {
-    final list = <LatLng>[];
-    if (_coords.containsKey(_startC)) list.add(_coords[_startC]!);
-    for (final c in _stopCs) {
-      if (_coords.containsKey(c)) list.add(_coords[c]!);
-    }
-    if (_coords.containsKey(_endC)) list.add(_coords[_endC]!);
-    return list;
-  }
+/* ────────────────────────  Mapa  ──────────────────────── */
+  Future<void> _refreshRoute() async {
+    _markers.clear();
+    _polyline.clear();
 
-  /* ============================ SUBMIT ============================ */
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) {
-      _msg('Complete todos los campos obligatorios');
-      return;
-    }
-    if (!_coords.containsKey(_startC) || !_coords.containsKey(_endC)) {
-      _msg('Seleccione un punto de partida y de llegada válidos');
-      return;
-    }
+    final pts = [
+      if (_start.latLng != null) _start.latLng!,
+      ..._stops.where((s) => s.latLng != null).map((s) => s.latLng!),
+      if (_end.latLng != null) _end.latLng!,
+    ];
 
-    // construir waypoints
-    final List<Waypoint> wps = [];
-    int order = 1;
-    void addW(String name, LatLng pos) {
-      wps.add(Waypoint(
-        order    : order++,
-        name     : name,
-        latitude : pos.latitude,
-        longitude: pos.longitude,
+    for (var i = 0; i < pts.length; i++) {
+      _markers.add(Marker(
+        markerId: MarkerId('p$i'),
+        position: pts[i],
+        infoWindow: InfoWindow(
+            title: i == 0
+                ? 'Inicio'
+                : (i == pts.length - 1 ? 'Destino' : 'Parada')),
       ));
     }
 
-    addW('Inicio', _coords[_startC]!);
-    for (final c in _stopCs) {
-      if (_coords.containsKey(c)) addW('Parada', _coords[c]!);
+    if (pts.length >= 2) {
+      final dir = PolylinePoints();
+      final res = await dir.getRouteBetweenCoordinates(
+        kMapsApiKey,
+        PointLatLng(pts.first.latitude, pts.first.longitude),
+        PointLatLng(pts.last.latitude, pts.last.longitude),
+        travelMode: TravelMode.driving,
+        wayPoints: pts
+            .sublist(1, pts.length - 1)
+            .map((e) => PolylineWayPoint(location: '${e.latitude},${e.longitude}'))
+            .toList(),
+      );
+      if (res.points.isNotEmpty) {
+        _polyline.addAll(
+            res.points.map((e) => LatLng(e.latitude, e.longitude)));
+      } else {
+        _polyline.addAll(pts);
+      }
+      // encuadrar
+      final neLat = pts.map((e) => e.latitude).reduce((a, b) => a > b ? a : b);
+      final neLng = pts.map((e) => e.longitude).reduce((a, b) => a > b ? a : b);
+      final swLat = pts.map((e) => e.latitude).reduce((a, b) => a < b ? a : b);
+      final swLng = pts.map((e) => e.longitude).reduce((a, b) => a < b ? a : b);
+      await _mapCtrl?.animateCamera(CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+              northeast: LatLng(neLat, neLng),
+              southwest: LatLng(swLat, swLng)),
+          60));
     }
-    addW('Destino', _coords[_endC]!);
+    setState(() {});
+  }
 
-    final nameRoute = '${_startC.text} – ${_endC.text}';
-    final now       = DateTime.now();
+/* ────────────────────────  GUARDAR  ──────────────────────── */
+  bool _sending = false;
+  Future<void> _save() async {
+    final vm = context.read<_RouteVM>();
+    if (!_formKey.currentState!.validate()) return;
+    if (_start.latLng == null || _end.latLng == null) {
+      _msg('Seleccione un punto de partida y destino válidos');
+      return;
+    }
+    if (_driverId == null) {
+      _msg('Seleccione conductor');
+      return;
+    }
+
+    final dep = vm.fmtTime.parse(_depC.text);
+    final arr = vm.fmtTime.parse(_arrC.text);
+    if (arr.isBefore(dep)) {
+      _msg('La hora de llegada debe ser posterior a la de salida');
+      return;
+    }
+
+    setState(() => _sending = true);
+
+    final List<Waypoint> wps = [];
+    int order = 1;
+    void add(String n, StopPoint p) {
+      if (p.latLng != null) {
+        wps.add(Waypoint(
+          order: order++,
+          name: n,
+          latitude: p.latLng!.latitude,
+          longitude: p.latLng!.longitude,
+        ));
+      }
+    }
+
+    add('Inicio', _start);
+    for (final s in _stops) add('Parada', s);
+    add('Destino', _end);
 
     final route = RouteModel(
-      type         : _type!,
-      customer     : _customerC.text.trim(),
-      nameRoute    : nameRoute,
-      status       : 'asignado',
-      shift        : _shiftC.text.trim(),
-      driverId     : _driverId,
-      driverName   : _driverName,
-      vehicleId    : _vehicleId,
-      vehiclePlate : _vehiclePlate,
-      departureTime: _fmtTime.parse(_departureC.text),
-      arrivalTime  : _fmtTime.parse(_arrivalC.text),
-      waypoints    : wps,
-      lastLatitude : wps.first.latitude,
+      type: _routeType!,
+      customer: _customerC.text.trim(),
+      nameRoute:
+      '${_start.controller.text} – ${_end.controller.text}',
+      status: 'asignado',
+      shift: _shiftC.text.trim(),
+      driverId: _driverId,
+      driverName: _driverName,
+      vehicleId: _vehicle?.id,
+      vehiclePlate: _vehicle?.licensePlate,
+      departureTime: dep,
+      arrivalTime: arr,
+      waypoints: wps,
+      lastLatitude: wps.first.latitude,
       lastLongitude: wps.first.longitude,
-      createdAt    : now,
-      updatedAt    : null,
-      companyName  : _companyName,
-      companyRuc   : _companyRuc,
+      createdAt: DateTime.now(),
+      updatedAt: null,
+      companyName: vm.companyName,
+      companyRuc: vm.companyRuc,
     );
 
-    final ok = await _routeSvc.createRoute(route);
+    final ok = await RouteService().createRoute(route);
     if (!mounted) return;
+    setState(() => _sending = false);
     Navigator.pop(context, ok);
   }
 
-  void _msg(String t) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+  void _msg(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
-  /* ============================ BUILD ============================ */
+/* ────────────────────────  BUILD  ──────────────────────── */
   @override
   Widget build(BuildContext context) {
+    final vm = context.watch<_RouteVM>();
+
     return Scaffold(
       backgroundColor: _kBg,
       appBar: AppBar(
-        title: const Text('Crear Ruta', style: TextStyle(color: _kTextMain)),
         backgroundColor: _kBar,
+        title: const Text('Crear Ruta', style: TextStyle(color: _kTextMain)),
         iconTheme: const IconThemeData(color: _kTextMain),
       ),
-      drawer: AppDrawer(name: widget.name, lastName: widget.lastName),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            DropdownButtonFormField<String>(
-              value: _type,
-              decoration: _dec('Tipo'),
-              items: const [
-                'regular','reten','express','evento','mantenimiento'
-              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (v) => setState(() => _type = v),
-              validator: (v) => v == null ? 'Seleccione tipo' : null,
-            ),
-            _txt('Cliente (empresa)', _customerC),
-            _txt('Personal recogido (Shift)', _shiftC, kb: TextInputType.number),
+      drawer: AppDrawer(
+          name: widget.userName, lastName: widget.userLastName),
+      body: vm.loading
+          ? const Center(
+          child: CircularProgressIndicator(color: _kAction))
+          : (vm.error != null
+          ? Center(
+          child: Text('Error: ${vm.error}',
+              style: const TextStyle(color: Colors.red)))
+          : _buildForm(vm)),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: FilledButton.icon(
+          onPressed: _sending ? null : _save,
+          style: FilledButton.styleFrom(
+            backgroundColor: _kAction,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          ),
+          icon: _sending
+              ? const SizedBox(
+              width: 18,
+              height: 18,
+              child:
+              CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+              : const Icon(Icons.save, color: Colors.black),
+          label: const Text('Guardar Ruta',
+              style: TextStyle(color: Colors.black)),
+        ),
+      ),
+    );
+  }
 
-            DropdownButtonFormField<String>(
-              value: _driverName,
-              decoration: _dec('Conductor'),
-              items: _transportistas
-                  .map((p) => DropdownMenuItem(
-                  value: p['fullName'] as String,
-                  child: Text(p['fullName'] as String)))
-                  .toList(),
-              onChanged: _onDriverSelected,
-              validator: (v) => v == null ? 'Seleccione conductor' : null,
-            ),
-
-            const SizedBox(height: 12),
-            _txt('Hora de salida',  _departureC,
-                readOnly: true, icon: Icons.schedule,
-                onTap: () => _pickTime(_departureC)),
-            _txt('Hora de llegada', _arrivalC,
-                readOnly: true, icon: Icons.schedule,
-                onTap: () => _pickTime(_arrivalC)),
-
-            const SizedBox(height: 18),
-            const Text('Direcciones',
-                style: TextStyle(color: _kAction, fontWeight: FontWeight.bold)),
-
-            _addressField('Punto de partida', _startC),
-            ..._stopCs
-                .mapIndexed((i,c)=> Row(
-                children:[
-                  Expanded(child: _addressField('Parada ${i+1}', c)),
-                  const SizedBox(width:8),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.redAccent),
-                    onPressed: () {
-                      setState(() {
-                        _stopCs.remove(c);   // 1) quitamos el controlador del array de paradas
-                        _coords.remove(c);   // 2) quitamos también sus coordenadas asociadas
-                        _rebuildPolyline();  // 3) actualizamos la línea del mapa
-                      });
-                    },
-                  ),
-                ])),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: (){
-                  setState(()=> _stopCs.add(TextEditingController()));
-                },
-                icon: const Icon(Icons.add,color:_kAction),
-                label: const Text('Agregar parada',
-                    style: TextStyle(color:_kAction)),
+/* ----------------------------- FORM UI ---------------------------- */
+  Widget _buildForm(_RouteVM vm) {
+    return Form(
+      key: _formKey,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          /* INFO GENERAL */
+          ExpansionTile(
+            initiallyExpanded: true,
+            backgroundColor: _kCard,
+            collapsedBackgroundColor: _kCard,
+            title: const Text('Información general',
+                style: TextStyle(color: _kTextMain)),
+            childrenPadding: const EdgeInsets.all(12),
+            children: [
+              DropdownButtonFormField<String>(
+                value: _routeType,
+                decoration: _dec('Tipo'),
+                items: const [
+                  'regular',
+                  'reten',
+                  'express',
+                  'evento',
+                  'mantenimiento'
+                ]
+                    .map((e) =>
+                    DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                validator: (v) => v == null ? 'Seleccione tipo' : null,
+                onChanged: (v) => setState(() => _routeType = v),
+                dropdownColor: _kCard,
+                style: const TextStyle(color: _kTextMain),
               ),
-            ),
-            _addressField('Punto de llegada', _endC),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _customerC,
+                decoration: _dec('Cliente (empresa)'),
+                validator: (v) =>
+                v == null || v.trim().isEmpty ? 'Requerido' : null,
+                style: const TextStyle(color: _kTextMain),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _shiftC,
+                keyboardType: TextInputType.number,
+                decoration: _dec('Personal recogido (Shift)'),
+                validator: (v) =>
+                v == null || v.trim().isEmpty ? 'Requerido' : null,
+                style: const TextStyle(color: _kTextMain),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
 
-            const SizedBox(height: 18),
-            SizedBox(
-              height: 250,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(_kRadius),
-                child: GoogleMap(
-                  initialCameraPosition: const CameraPosition(
-                      target: LatLng(-12.06,-77.04), zoom: 11),
-                  markers: {
-                    for (final entry in _coords.entries)
-                      Marker(
-                        markerId: MarkerId(entry.key.hashCode.toString()),
-                        position: entry.value,
-                        infoWindow: InfoWindow(
-                            title: entry.key == _startC
-                                ? 'Inicio'
-                                : entry.key == _endC
-                                ? 'Destino'
-                                : 'Parada'),
-                      )
-                  },
-                  polylines: _polylinePoints.length<2 ? {} : {
-                    Polyline(
-                      polylineId: const PolylineId('route'),
-                      color: Colors.amber,
-                      width: 4,
-                      points: _polylinePoints,
-                    )
-                  },
-                  onMapCreated: (c)=> _mapCtrl=c,
-                  myLocationEnabled: true,
+          /* CONDUCTOR */
+          ExpansionTile(
+            backgroundColor: _kCard,
+            collapsedBackgroundColor: _kCard,
+            title: const Text('Conductor & Horarios',
+                style: TextStyle(color: _kTextMain)),
+            childrenPadding: const EdgeInsets.all(12),
+            children: [
+              DropdownButtonFormField<int>(
+                value: _driverId,
+                decoration: _dec('Conductor'),
+                items: vm.carriers
+                    .map((c) => DropdownMenuItem(
+                  value: c['id'] as int,
+                  child: Text(c['name'] as String),
+                ))
+                    .toList(),
+                onChanged: (id) {
+                  setState(() {
+                    _driverId = id;
+                    _driverName = vm.carriers
+                        .firstWhere((e) => e['id'] == id)['name'] as String;
+                    _vehicle = vm.vehicleForDriver(id!);
+                  });
+                },
+                validator: (v) => v == null ? 'Seleccione conductor' : null,
+                dropdownColor: _kCard,
+                style: const TextStyle(color: _kTextMain),
+              ),
+              if (_vehicle != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 4),
+                  child: Text('Vehículo asignado: ${_vehicle!.licensePlate}',
+                      style: const TextStyle(color: _kTextSub)),
+                ),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _depC,
+                    readOnly: true,
+                    decoration: _dec('Hora salida', Icons.schedule),
+                    validator: (v) =>
+                    v == null || v.isEmpty ? 'Requerido' : null,
+                    style: const TextStyle(color: _kTextMain),
+                    onTap: () => _pickTime(_depC),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _arrC,
+                    readOnly: true,
+                    decoration: _dec('Hora llegada', Icons.schedule),
+                    validator: (v) =>
+                    v == null || v.isEmpty ? 'Requerido' : null,
+                    style: const TextStyle(color: _kTextMain),
+                    onTap: () => _pickTime(_arrC),
+                  ),
+                ),
+              ]),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          /* DIRECCIONES */
+          ExpansionTile(
+            initiallyExpanded: true,
+            backgroundColor: _kCard,
+            collapsedBackgroundColor: _kCard,
+            title:
+            const Text('Direcciones', style: TextStyle(color: _kTextMain)),
+            childrenPadding: const EdgeInsets.all(12),
+            children: [
+              _autoField(_start),
+              ..._stops.map((s) => Row(children: [
+                Expanded(child: _autoField(s)),
+                const SizedBox(width: 6),
+                IconButton(
+                    icon: const Icon(Icons.close,
+                        color: Colors.redAccent),
+                    onPressed: () => _removeStop(s))
+              ])),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _addStop,
+                  icon: const Icon(Icons.add, color: _kAction),
+                  label: const Text('Agregar parada',
+                      style: TextStyle(color: _kAction)),
                 ),
               ),
-            ),
+              _autoField(_end),
+            ],
+          ),
+          const SizedBox(height: 12),
 
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _submit,
-              icon: const Icon(Icons.save, color: Colors.black),
-              label: const Text('Guardar Ruta',
-                  style: TextStyle(color: Colors.black)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _kAction,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30)),
-              ),
+          /* MAPA */
+          Container(
+            height: 270,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(_kRadius),
+              color: _kCard,
             ),
-          ],
+            clipBehavior: Clip.antiAlias,
+            child: GoogleMap(
+              initialCameraPosition:
+              const CameraPosition(target: LatLng(-12.06, -77.04), zoom: 11),
+              markers: _markers,
+              polylines: _polyline.length < 2
+                  ? {}
+                  : {
+                Polyline(
+                  polylineId: const PolylineId('route'),
+                  color: Colors.amber,
+                  width: 5,
+                  points: _polyline,
+                )
+              },
+              onMapCreated: (c) => _mapCtrl = c,
+              myLocationEnabled: true,
+            ),
+          ),
+          const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+
+/* ---------------------- Campo Autocomplete ---------------------- */
+  Widget _autoField(StopPoint p) {
+    return Autocomplete<AutocompletePrediction>(
+      optionsBuilder: (t) => _searchPlaces(t.text), // ✅  Devuelve Future<Iterable>
+      displayStringForOption: (o) => o.description ?? '',
+      onSelected: (c) => _selectPrediction(p, c),
+      fieldViewBuilder: (ctx, ctl, focus, _) {
+        ctl.text = p.controller.text;
+        ctl.addListener(() => p.controller.text = ctl.text);
+        return TextFormField(
+          controller: ctl,
+          focusNode: focus,
+          decoration: _dec(p.label, Icons.place_outlined),
+          style: const TextStyle(color: _kTextMain),
+          validator: (v) =>
+          v == null || v.trim().isEmpty ? 'Requerido' : null,
+          onChanged: (_) {
+            p.latLng = null;
+            _debounce(_refreshRoute);
+          },
+        );
+      },
+      optionsViewBuilder: (ctx, onSelect, opts) => Align(
+        alignment: Alignment.topLeft,
+        child: Material(
+          color: _kCard,
+          elevation: 4,
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            height: 250,
+            child: ListView(
+              children: opts
+                  .map((o) => ListTile(
+                title: Text(o.description ?? '',
+                    style: const TextStyle(color: _kTextMain)),
+                onTap: () => onSelect(o),
+              ))
+                  .toList(),
+            ),
+          ),
         ),
       ),
     );
   }
-
-  /* ============================ HELPERS ============================ */
-  Widget _txt(
-      String lbl,
-      TextEditingController c, {
-        TextInputType kb = TextInputType.text,
-        bool readOnly = false,
-        IconData? icon,
-        VoidCallback? onTap,
-      }) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: TextFormField(
-        controller : c,
-        readOnly   : readOnly,
-        keyboardType: kb,
-        style      : const TextStyle(color: _kTextMain),
-        decoration : _dec(lbl).copyWith(
-          suffixIcon: icon != null ? Icon(icon, color: _kAction) : null,
-        ),
-        validator  : (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
-        onTap      : onTap,
-      ),
-    );
-  }
-
-  Widget _addressField(String lbl, TextEditingController c) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: TextFormField(
-        controller: c,
-        style: const TextStyle(color: _kTextMain),
-        decoration: _dec(lbl).copyWith(
-            suffixIcon: const Icon(Icons.place_outlined, color: _kAction)),
-        validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
-        onChanged: (_) {
-          if (c.text.isEmpty) _coords.remove(c);
-        },
-        onTap: () async {
-          await Future.delayed(const Duration(milliseconds: 100));
-          _showAddressAutocomplete(c);
-        },
-        onFieldSubmitted: (_) => _showAddressAutocomplete(c),
-      ),
-    );
-  }
-
-  InputDecoration _dec(String lbl) => InputDecoration(
-    labelText: lbl,
-    labelStyle: const TextStyle(color: _kTextSub),
-    filled: true,
-    fillColor: _kCard,
-    border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(_kRadius),
-        borderSide: BorderSide.none),
-    focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(_kRadius),
-        borderSide: const BorderSide(color: _kAction)),
-  );
 }
