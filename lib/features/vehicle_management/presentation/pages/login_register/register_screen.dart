@@ -71,14 +71,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 16),
               _roleCard(
                 icon: Icons.admin_panel_settings,
-                label: 'Gerente',
+                label: 'Administrador de Flota',
                 selected: _selectedRole == 'Gerente',
                 onTap: () => _onRoleSelected('Gerente'),
               ),
               const SizedBox(height: 16),
               _roleCard(
                 icon: Icons.local_shipping,
-                label: 'Transportista',
+                label: 'Conductor',
                 selected: _selectedRole == 'Transportista',
                 onTap: () => _onRoleSelected('Transportista'),
               ),

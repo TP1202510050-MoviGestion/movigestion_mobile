@@ -64,7 +64,7 @@ class _UserRegistrationScreenState extends State<UserRegistrationScreen>
               child: Image.asset('assets/images/login_logo.png', height: 120),
             ),
             const SizedBox(height: 30),
-            Text('Registro de Gerente',
+            Text('Registro de Administrador de Flotas',
                 style: const TextStyle(
                     color: Colors.amber,
                     fontSize: 24,

@@ -16,7 +16,11 @@ import '../../../../../../core/widgets/app_drawer.dart';
 
 class CarrierProfilesScreen extends StatefulWidget {
   final String name, lastName; // datos del gerente
-  const CarrierProfilesScreen({super.key, required this.name, required this.lastName});
+  const CarrierProfilesScreen({
+    super.key,
+    required this.name,
+    required this.lastName,
+  });
 
   @override
   State<CarrierProfilesScreen> createState() => _CarrierProfilesScreenState();
@@ -24,14 +28,14 @@ class CarrierProfilesScreen extends StatefulWidget {
 
 class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
   // --- Constantes y Colores ---
-  // Centralizar colores y constantes facilita el mantenimiento y asegura consistencia.
   static const _primaryColor = Color(0xFFEA8E00);
   static const _backgroundColor = Color(0xFF1E1F24);
   static const _cardColor = Color(0xFF2C2F38);
   static const _textColor = Colors.white;
   static const _textMutedColor = Colors.white70;
 
-  final String _baseApiUrl = '${AppConstants.baseUrl}${AppConstants.profile}';
+  final String _baseApiUrl =
+      '${AppConstants.baseUrl}${AppConstants.profile}';
 
   // --- Estado ---
   bool _isLoading = true;
@@ -43,12 +47,10 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchData(); // Una sola llamada para inicializar los datos.
+    _fetchData();
   }
 
   // --- Lógica de Datos ---
-
-  /// Optimización: Combina las dos llamadas a la API en una sola para mejorar el rendimiento.
   Future<void> _fetchData() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -59,11 +61,13 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
       if (response.statusCode == 200) {
         final List<dynamic> allProfiles = jsonDecode(response.body);
 
-        // 1. Encuentra los datos del gerente para obtener la empresa.
+        // 1. Obtiene la empresa del gerente.
         final managerProfile = allProfiles.firstWhere(
               (profile) =>
-          profile['name'].toString().toLowerCase() == widget.name.toLowerCase() &&
-              profile['lastName'].toString().toLowerCase() == widget.lastName.toLowerCase(),
+          profile['name'].toString().toLowerCase() ==
+              widget.name.toLowerCase() &&
+              profile['lastName'].toString().toLowerCase() ==
+                  widget.lastName.toLowerCase(),
           orElse: () => null,
         );
 
@@ -72,9 +76,22 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
           _companyRuc = managerProfile['companyRuc'] ?? '';
         }
 
-        // 2. Filtra la lista de transportistas.
+        // 2. Filtra SOLO transportistas de la misma empresa y RUC.
         _carriers = allProfiles
-            .where((profile) => profile['type'] == 'Transportista')
+            .where((profile) {
+          final bool isTransportista =
+              profile['type']?.toString() == 'Transportista';
+          final bool sameCompanyName =
+              (profile['companyName'] ?? '')
+                  .toString()
+                  .toLowerCase() ==
+                  _companyName.toLowerCase();
+          final bool sameCompanyRuc =
+              (profile['companyRuc'] ?? '').toString() == _companyRuc;
+          return isTransportista &&
+              sameCompanyName &&
+              sameCompanyRuc;
+        })
             .map((profile) => {
           'id': profile['id'],
           'name': profile['name'],
@@ -136,7 +153,9 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: _primaryColor));
+      return const Center(
+        child: CircularProgressIndicator(color: _primaryColor),
+      );
     }
     if (_carriers.isEmpty) {
       return const Center(
@@ -147,7 +166,6 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
       );
     }
     return ListView.builder(
-      // Añadimos padding para que el FAB no tape el último elemento.
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       itemCount: _carriers.length,
       itemBuilder: (context, index) {
@@ -164,7 +182,7 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
     );
   }
 
-  /// Tarjeta de transportista con diseño mejorado.
+  /// Tarjeta de transportista
   Widget _buildCarrierCard({
     required int id,
     required String name,
@@ -199,9 +217,12 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
           ),
           title: Text(
             '$name $lastName',
-            style: const TextStyle(color: _textColor, fontWeight: FontWeight.bold, fontSize: 17),
+            style: const TextStyle(
+              color: _textColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 17,
+            ),
           ),
-          // Subtítulo mejorado con Column y Rows para mejor alineación.
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 8.0),
             child: Column(
@@ -214,7 +235,8 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
             ),
           ),
           trailing: IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            icon:
+            const Icon(Icons.delete_outline, color: Colors.redAccent),
             onPressed: () => _confirmDeleteDialog(id),
           ),
         ),
@@ -222,7 +244,6 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
     );
   }
 
-  /// Helper para crear filas de información (Icono + Texto) en la tarjeta.
   Widget _buildInfoRow(IconData icon, String text) {
     return Row(
       children: [
@@ -231,7 +252,8 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(color: _textMutedColor, fontSize: 13),
+            style:
+            const TextStyle(color: _textMutedColor, fontSize: 13),
             overflow: TextOverflow.ellipsis,
           ),
         ),

@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 
 // Importa los servicios y pantallas necesarios
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
+import 'package:provider/provider.dart';
 
 
+import '../../features/chat/chat_screen.dart';
 import '../../features/vehicle_management/presentation/pages/businessman/carrier_profiles/carrier_profiles.dart';
 import '../../features/vehicle_management/presentation/pages/businessman/profile/profile_screen.dart';
 import '../../features/vehicle_management/presentation/pages/businessman/reports/reports_screen.dart';
@@ -12,6 +14,7 @@ import '../../features/vehicle_management/presentation/pages/businessman/routes/
 import '../../features/vehicle_management/presentation/pages/businessman/shipments/shipments_screen.dart';
 import '../../features/vehicle_management/presentation/pages/businessman/vehicle/vehicles_screen.dart';
 import '../../features/vehicle_management/presentation/pages/login_register/login_screen.dart';
+import '../../providers/chat_provider.dart';
 
 // Constantes de estilo
 class AppColors {
@@ -186,7 +189,31 @@ class _AppDrawerState extends State<AppDrawer> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => RoutesScreen(name: widget.name, lastName: widget.lastName)));
             },
           ),
+
+          /* ─────────── 2️⃣ NUEVO ITEM CHATBOT ─────────── */
+          _drawerItem(
+            context,
+            icon: Icons.chat_bubble_outline,
+            title: 'CHATBOT',
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ChangeNotifierProvider(
+                    create: (_) => ChatProvider(),
+                    child: const ChatScreen(),
+                  ),
+                ),
+              );
+            },
+          ),
+          /* ──────────────────────────────────────────── */
+
+
           const SizedBox(height: 160),
+
+
 
           _drawerItem(
             context,

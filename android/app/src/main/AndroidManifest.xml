@@ -3,6 +3,9 @@
         android:label="movigestion_mobile"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBThMREkQEkiWX0v1twwB-Z_9GmmZAXheE"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -21,9 +24,7 @@
               android:resource="@style/NormalTheme"
 
               />
-            <meta-data
-                android:name="com.google.android.geo.API_KEY"
-                android:value="AIzaSyA3oXxsisOPBwW1xHV172Y2BCfi7EEiC8k"/>
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>

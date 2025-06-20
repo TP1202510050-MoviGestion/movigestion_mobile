@@ -11,3 +11,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# Ignorar claves y secretos
+*.json
+assets/keys/

@@ -1,26 +1,40 @@
 /* --------------  IMPORTS -------------- */
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;                                      // ⬅️ NUEVO
+import 'package:movigestion_mobile/core/app_constants.dart';                 // ⬅️ NUEVO
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehicle_model.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehicle_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/vehicle/assign_vehicle_screen.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/vehicle/vehicle_detail_screen.dart';
 import '../../../../../../core/widgets/app_drawer.dart';
 
-
 class VehiclesScreen extends StatefulWidget {
   final String name;
   final String lastName;
-  const VehiclesScreen({super.key, required this.name, required this.lastName});
+  const VehiclesScreen({
+    super.key,
+    required this.name,
+    required this.lastName,
+  });
 
   @override
   State<VehiclesScreen> createState() => _VehiclesScreenState();
 }
 
 class _VehiclesScreenState extends State<VehiclesScreen> {
+  /* --------------  SERVICIOS Y ESTADO -------------- */
   final _svc = VehicleService();
   final List<VehicleModel> _vehicles = [];
   bool _loading = true;
+
+  // Datos de la empresa del usuario (se obtienen al vuelo)
+  String _companyName = '';
+  String _companyRuc = '';
+
+  // End-point de perfiles para averiguar la empresa del usuario
+  final String _profileApiUrl =
+      '${AppConstants.baseUrl}${AppConstants.profile}';                        // ⬅️ NUEVO
 
   /* ------------ CARGA ------------ */
   @override
@@ -29,12 +43,37 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     _fetchVehicles();
   }
 
+  /// Obtiene la empresa del usuario y luego filtra los vehículos
   Future<void> _fetchVehicles() async {
     setState(() => _loading = true);
+
     try {
+      /* -------- 1) OBTENER EMPRESA DEL USUARIO -------- */
+      final profileResp = await http.get(Uri.parse(_profileApiUrl));
+      if (profileResp.statusCode == 200) {
+        final profiles = jsonDecode(profileResp.body) as List<dynamic>;
+        final managerProfile = profiles.firstWhere(
+              (p) =>
+          p['name'].toString().toLowerCase() ==
+              widget.name.toLowerCase() &&
+              p['lastName'].toString().toLowerCase() ==
+                  widget.lastName.toLowerCase(),
+          orElse: () => null,
+        );
+
+        if (managerProfile != null) {
+          _companyName = (managerProfile['companyName'] ?? '').toString();
+          _companyRuc = (managerProfile['companyRuc'] ?? '').toString();
+        }
+      }
+
+      /* -------- 2) CARGAR VEHÍCULOS Y FILTRAR -------- */
+      final all = await _svc.getAllVehicles();
       _vehicles
         ..clear()
-        ..addAll(await _svc.getAllVehicles());
+        ..addAll(all.where((v) =>
+        v.companyName.toLowerCase() == _companyName.toLowerCase() &&
+            v.companyRuc == _companyRuc));
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -47,8 +86,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     }
   }
 
-  void _addVehicle(VehicleModel v) =>
-      setState(() => _vehicles.insert(0, v));
+  void _addVehicle(VehicleModel v) => setState(() => _vehicles.insert(0, v));
 
   /* ------------ UI ------------ */
   @override
@@ -65,7 +103,8 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
             const SizedBox(width: 12),
             const Icon(Icons.directions_car, color: Colors.amber),
             const SizedBox(width: 12),
-            Text('Vehículos', style: textTheme.titleLarge?.copyWith(color: Colors.white70)),
+            Text('Vehículos',
+                style: textTheme.titleLarge?.copyWith(color: Colors.white70)),
           ],
         ),
       ),
@@ -74,9 +113,10 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
         onRefresh: _fetchVehicles,
         color: Colors.amber,
         child: _loading
-            ? const Center(child: CircularProgressIndicator(color: Colors.amber))
+            ? const Center(
+            child: CircularProgressIndicator(color: Colors.amber))
             : _vehicles.isEmpty
-            ? ListView( // permite pull-to-refresh
+            ? ListView(
           children: const [
             SizedBox(height: 120),
             Center(
@@ -109,7 +149,8 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
         heroTag: 'addVehicle',
         backgroundColor: const Color(0xFFFFA000),
         icon: const Icon(Icons.add, color: Colors.black),
-        label: const Text('Asignar vehículo', style: TextStyle(color: Colors.black)),
+        label: const Text('Asignar vehículo',
+            style: TextStyle(color: Colors.black)),
         onPressed: () async {
           final created = await Navigator.push<VehicleModel?>(
             context,
@@ -126,7 +167,6 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
       ),
     );
   }
-
 }
 
 /* ═════════════  CARD DE VEHÍCULO  ════════════ */
@@ -140,24 +180,19 @@ class _VehicleCard extends StatelessWidget {
     final raw = vehicle.vehicleImage.trim();
     if (raw.isEmpty) return null;
 
-    // ¿URL absoluta?
     final uri = Uri.tryParse(raw);
     if (uri != null && uri.hasScheme && uri.hasAbsolutePath) {
       return NetworkImage(raw);
     }
 
-    // Asumimos Base-64 (quitamos posible prefijo Data-URI)
-    final cleaned = raw.contains(',')
-        ? raw.split(',').last
-        : raw;
+    final cleaned = raw.contains(',') ? raw.split(',').last : raw;
     try {
       final bytes = base64Decode(base64.normalize(cleaned));
       return MemoryImage(bytes);
     } catch (_) {
-      return null; // provocará que se vea el icono de fallback
+      return null;
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -183,18 +218,22 @@ class _VehicleCard extends StatelessWidget {
                   height: 64,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.directions_car, size: 60, color: Colors.grey),
+                  const Icon(Icons.directions_car,
+                      size: 60, color: Colors.grey),
                 )
-                    : const Icon(Icons.directions_car, size: 60, color: Colors.grey),
+                    : const Icon(Icons.directions_car,
+                    size: 60, color: Colors.grey),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('${vehicle.brand} • ${vehicle.model} (${vehicle.year})',
+                    Text(
+                        '${vehicle.brand} • ${vehicle.model} (${vehicle.year})',
                         style: const TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.w600)),
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
                     _info('Placa', vehicle.licensePlate),
                     _info('Estado', vehicle.status),
@@ -202,7 +241,8 @@ class _VehicleCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.amber, size: 26)
+              const Icon(Icons.chevron_right,
+                  color: Colors.amber, size: 26)
             ],
           ),
         ),
