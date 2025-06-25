@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
@@ -366,24 +367,62 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 _sectionLabel('Asignación'),
                 _field('Conductor', _driverC),
 
-                /* ── Telemetría & creación ── */
+                 /* ── Telemetría & creación ── */
                 _sectionLabel('Info de seguimiento'),
+
+                /// ────────────────  Última ubicación (título + mapa / placeholder) ────────────────
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    'Última ubicación',
+                    style: const TextStyle(
+                      color: _kTextSub,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+
+                if (v.lastLatitude != null && v.lastLongitude != null)
+                  _MiniMap(lat: v.lastLatitude!, lon: v.lastLongitude!)
+                else
+                  Container(
+                    height: 200,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _kCard,
+                      borderRadius: BorderRadius.circular(_kRadius),
+                    ),
+                    child: const Text(
+                      'No se pudo encontrar la ubicación del vehículo',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: _kTextSub),
+                    ),
+                  ),
+
+                const SizedBox(height: 8),
+
+                /// ────────────────  Resto de lecturas  ────────────────
                 _readonlyInfo(
-                  'KILOMETRAJE',
-                  v.lastSpeed != null
-                      ? '${v.lastSpeed!.kmh.toStringAsFixed(1)} km/h  (${_fmt.format(v.lastSpeed!.timestamp)})'
+                  'Altitud',
+                  v.lastAltitudeMeters != null
+                      ? '${v.lastAltitudeMeters!.toStringAsFixed(1)} m'
                       : '--',
                 ),
                 _readonlyInfo(
-                  'Última ubicación',
-                  v.lastLocation != null
-                      ? '${v.lastLocation!.latitude.toStringAsFixed(5)}, ${v.lastLocation!.longitude.toStringAsFixed(5)}  (${_fmt.format(v.lastLocation!.timestamp)})'
+                  'Velocidad',
+                  v.lastKmh != null ? '${v.lastKmh!.toStringAsFixed(1)} km/h' : '--',
+                ),
+                _readonlyInfo(
+                  'Última actualización',
+                  v.lastTelemetryTimestamp != null
+                      ? DateFormat('yyyy-MM-dd HH:mm').format(v.lastTelemetryTimestamp!)
                       : '--',
                 ),
                 _readonlyInfo(
                   'Fecha de creación',
                   v.assignedAt != null ? _fmt.format(v.assignedAt!) : '--',
                 ),
+
 
                 /* ── Documentos ── */
                 _sectionLabel('Documentos'),
@@ -572,3 +611,36 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       ? 'Este campo es requerido'
       : null;
 }
+
+class _MiniMap extends StatelessWidget {
+  final double lat, lon;
+  const _MiniMap({required this.lat, required this.lon});
+
+  @override
+  Widget build(BuildContext context) {
+    final camera = CameraPosition(
+      target: LatLng(lat, lon),
+      zoom: 15,
+    );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(_kRadius),
+      child: SizedBox(
+        height: 200,
+        child: GoogleMap(
+          initialCameraPosition: camera,
+          liteModeEnabled: true,          // modo estático (sin gestos pesados)
+          compassEnabled: false,
+          zoomControlsEnabled: false,
+          markers: {
+            Marker(
+              markerId: const MarkerId('veh'),
+              position: LatLng(lat, lon),
+            ),
+          },
+        ),
+      ),
+    );
+  }
+}
+
