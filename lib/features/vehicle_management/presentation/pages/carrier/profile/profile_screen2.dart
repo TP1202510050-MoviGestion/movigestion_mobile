@@ -246,7 +246,7 @@ class _ProfileScreen2State extends State<ProfileScreen2> {
       children: [
         Icon(Icons.person, color: Colors.amber),
         SizedBox(width: 10),
-        Text('Perfil', style: TextStyle(color: Colors.grey, fontSize: 22, fontWeight: FontWeight.w600)),
+        Text('Perfil', style: TextStyle(color: Colors.white)),
       ],
     ),
   );

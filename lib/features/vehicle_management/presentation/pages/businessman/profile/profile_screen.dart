@@ -91,7 +91,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     title: const Row(
       children: [
         Icon(Icons.person, color: Colors.amber), SizedBox(width: 10),
-        Text('Perfil')
+        Text('Perfil', style: const TextStyle(color: Colors.white),)
       ],
     ),
   );

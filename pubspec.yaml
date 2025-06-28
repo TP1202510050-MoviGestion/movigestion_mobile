@@ -52,6 +52,8 @@ dependencies:
   googleapis_auth: ^1.4.1      # firma del JWT
   dialogflow_grpc: ^0.2.9      # cliente oficial gRPC
   protobuf: ^2.1.0             # versión requerida por dialogflow_grpc
+  flutter_markdown: ^0.7.1
+
 
 
 

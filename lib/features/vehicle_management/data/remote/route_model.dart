@@ -14,6 +14,20 @@ class Waypoint {
     required this.longitude,
   });
 
+  Waypoint copyWith({
+    int? order,
+    String? name,
+    double? latitude,
+    double? longitude,
+  }) {
+    return Waypoint(
+      order: order ?? this.order,
+      name: name ?? this.name,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+    );
+  }
+
   factory Waypoint.fromJson(Map<String, dynamic> j) => Waypoint(
     order     : j['order']     as int,
     name      : j['name']      as String,
@@ -183,7 +197,7 @@ class RouteModel {
     'vehiclePlate' : vehiclePlate,
     'departureTime': departureTime?.toIso8601String(),
     'arrivalTime'  : arrivalTime?.toIso8601String(),
-    'waypoints'    : waypoints.map((w) => w.toJson()).toList(),
+    'waypoints'    : json.encode(waypoints.map((w) => w.toJson()).toList()),
     'lastLatitude' : lastLatitude,
     'lastLongitude': lastLongitude,
     'createdAt'    : createdAt?.toIso8601String(),

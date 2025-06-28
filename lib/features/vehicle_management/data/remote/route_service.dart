@@ -6,11 +6,15 @@ import 'route_model.dart';
 
 class RouteService {
   /* -------------------- READ -------------------- */
+// En RouteService
+
   Future<List<RouteModel>> getAllRoutes() async {
     final url = Uri.parse('${AppConstants.baseUrl}${AppConstants.route}');
     final res = await http.get(url);
     if (res.statusCode == 200) {
-      final data = json.decode(res.body) as List<dynamic>;
+      final decodedBody = utf8.decode(res.bodyBytes);
+      final data = json.decode(decodedBody) as List<dynamic>;
+
       return data.map((e) => RouteModel.fromJson(e)).toList();
     }
     throw Exception('Failed to load routes (status ${res.statusCode})');
@@ -27,7 +31,7 @@ class RouteService {
     final url = Uri.parse('${AppConstants.baseUrl}${AppConstants.route}');
     final res = await http.post(
       url,
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json; charset=UTF-8'},
       body: json.encode(route.toJson()),
     );
     return res.statusCode == 200 || res.statusCode == 201;
@@ -38,7 +42,7 @@ class RouteService {
     final url = Uri.parse('${AppConstants.baseUrl}${AppConstants.route}/$id');
     final res = await http.put(
       url,
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json; charset=UTF-8'},
       body: json.encode(route.toJson()),
     );
     return res.statusCode == 200;

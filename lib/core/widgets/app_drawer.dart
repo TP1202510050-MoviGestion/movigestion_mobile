@@ -142,7 +142,7 @@ class _AppDrawerState extends State<AppDrawer> {
                 _buildProfileImage(),
                 const SizedBox(height: 12),
                 Text(
-                  '${widget.name} ${widget.lastName} – Gerente',
+                  '${widget.name} ${widget.lastName} – Administrador',
                   style: const TextStyle(color: Colors.grey, fontSize: 16),
                   overflow: TextOverflow.ellipsis,
                 ),

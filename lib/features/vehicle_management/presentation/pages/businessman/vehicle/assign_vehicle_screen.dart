@@ -408,9 +408,7 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
             _buildTextField('Capacidad de Asientos', _seatC, keyboardType: TextInputType.number),
             _buildTextField('Nombre del Conductor Asignado', _drvC),
 
-            _buildSectionHeader('Telemetría y Sensores'),
-            _buildTextField('GPS Sensor ID', _gpsC, isRequired: false),
-            _buildTextField('Speed Sensor ID', _spdC, isRequired: false),
+
 
             _buildSectionHeader('Documentación'),
             _buildDateField('Fecha de Última Inspección Técnica', _inspC),

@@ -12,6 +12,7 @@ import '../../features/vehicle_management/presentation/pages/businessman/shipmen
 import '../../features/vehicle_management/presentation/pages/businessman/vehicle/vehicles_screen.dart';
 import '../../features/vehicle_management/presentation/pages/carrier/profile/profile_screen2.dart';
 import '../../features/vehicle_management/presentation/pages/carrier/reports/reports_carrier_screen.dart';
+import '../../features/vehicle_management/presentation/pages/carrier/routes/routes_driver_screen.dart';
 import '../../features/vehicle_management/presentation/pages/carrier/shipments/shipments_screen2.dart';
 import '../../features/vehicle_management/presentation/pages/carrier/vehicle/vehicle_detail_carrier_screen.dart';
 import '../../features/vehicle_management/presentation/pages/login_register/login_screen.dart';
@@ -175,10 +176,10 @@ class _AppDrawer2State extends State<AppDrawer2> {
           ),
           _drawerItem(
             context,
-            icon: Icons.local_shipping,
+            icon: Icons.route,
             title: 'RUTAS',
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => ShipmentsScreen2(name: widget.name, lastName: widget.lastName)));
+              Navigator.push(context, MaterialPageRoute(builder: (_) => RoutesDriverScreen(name: widget.name, lastName: widget.lastName)));
             },
           ),
           const SizedBox(height: 160),

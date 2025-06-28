@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -21,14 +20,13 @@ import '../../../../data/remote/vehicle_model.dart';
 import '../../../../data/remote/vehicle_service.dart';
 
 /* ---------- Constantes visuales ---------- */
-/* ---------- Constantes visuales ---------- */
-const _kBg       = Color(0xFF1E1F24);
-const _kCard     = Color(0xFF2F353F);
-const _kBar      = Color(0xFF2C2F38);
-const _kAction   = Color(0xFFEA8E00);
+const _kBg = Color(0xFF1E1F24);
+const _kCard = Color(0xFF2F353F);
+const _kBar = Color(0xFF2C2F38);
+const _kAction = Color(0xFFEA8E00);
 const _kTextMain = Colors.white;
-const _kTextSub  = Colors.white70;
-const _kRadius   = 12.0;
+const _kTextSub = Colors.white70;
+const _kRadius = 12.0;
 
 class VehicleDetailScreen extends StatefulWidget {
   final VehicleModel vehicle;
@@ -52,11 +50,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   late final _yearC   = TextEditingController(text: v.year.toString());
   late final _colorC  = TextEditingController(text: v.color);
   late final _seatC   = TextEditingController(text: v.seatingCapacity.toString());
-  late       String   _status   = v.status;              // dropdown
-  late final _gpsC    = TextEditingController(text: v.gpsSensorId);
-  late final _speedC  = TextEditingController(text: v.speedSensorId);
+  late       String   _status   = v.status;
   late final _driverC = TextEditingController(text: v.driverName);
-  late final _inspC   = TextEditingController(text: _fmt.format(v.lastTechnicalInspectionDate));
+  late final _inspC   = TextEditingController(text: _fmt.format(v.lastTechnicalInspectionDate!));
   late final _workshopC = TextEditingController(
     text: v.dateToGoTheWorkshop != null ? _fmt.format(v.dateToGoTheWorkshop!) : '',
   );
@@ -67,8 +63,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   final _svc     = VehicleService();
 
   File? _pickedImg, _pickedSoat, _pickedCard;
-  bool _editMode = false;                               // controla edición
-  final _shot = ScreenshotController();                 // captura pantalla
+  bool _editMode = false;
+  final _shot = ScreenshotController();
 
   VehicleModel get v => widget.vehicle;
 
@@ -92,7 +88,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
         data: Theme.of(ctx).copyWith(
           colorScheme: const ColorScheme.dark(
               primary: _kAction, surface: _kCard,
-              onSurface: _kTextMain, onPrimary: _kTextMain),
+              onSurface: _kTextMain, onPrimary: Colors.black),
         ),
         child: child!,
       ),
@@ -152,8 +148,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       color        : _colorC.text.trim(),
       seatingCapacity: int.tryParse(_seatC.text.trim()) ?? v.seatingCapacity,
       status       : _status,
-      gpsSensorId  : _gpsC.text.trim(),
-      speedSensorId: _speedC.text.trim(),
       driverName   : _driverC.text.trim(),
       lastTechnicalInspectionDate: _fmt.parse(_inspC.text),
       dateToGoTheWorkshop: _workshopC.text.isNotEmpty ? _fmt.parse(_workshopC.text) : null,
@@ -269,17 +263,10 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 }
               },
               itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'edit',
-                  child: Text(_editMode? 'Cancelar edición':'Editar'),
-                ),
+                PopupMenuItem(value: 'edit', child: Text(_editMode? 'Cancelar edición':'Editar')),
                 const PopupMenuItem(value: 'share',  child: Text('Compartir')),
                 const PopupMenuDivider(),
-                const PopupMenuItem(
-                  value: 'delete',
-                  textStyle: TextStyle(color: Colors.redAccent),
-                  child: Text('Eliminar'),
-                ),
+                const PopupMenuItem(value: 'delete', textStyle: TextStyle(color: Colors.redAccent), child: Text('Eliminar')),
               ],
             )
           ],
@@ -291,154 +278,33 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                /* ── Foto ── */
-                GestureDetector(
-                  onTap: () async {
-                    final f = await _pickImageFile();
-                    if (f != null) setState(()=> _pickedImg = f);
-                  },
-                  child: Container(
-                    height: 200,
-                    decoration: BoxDecoration(
-                      color: _kCard,
-                      borderRadius: BorderRadius.circular(_kRadius),
-                      image: _pickedImg != null
-                          ? DecorationImage(image: FileImage(_pickedImg!), fit: BoxFit.cover)
-                          : (_thumbnail(v.vehicleImage) != null
-                          ? DecorationImage(image: _thumbnail(v.vehicleImage)!, fit: BoxFit.cover)
-                          : null),
-                    ),
-                    alignment: Alignment.center,
-                    child: (_pickedImg == null && _thumbnail(v.vehicleImage) == null)
-                        ? const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.camera_alt_outlined, color: _kTextSub, size: 40),
-                        SizedBox(height: 8),
-                        Text('Toca para cambiar la foto', style: TextStyle(color: _kTextSub)),
-                      ],
-                    )
-                        : null,
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                /* ── Datos generales ── */
-                _sectionLabel('Datos generales'),
+                _buildVehicleImage(),
+                const SizedBox(height: 24),
+                _buildSectionLabel('Datos generales'),
                 _field('Placa', _plateC, validator: _required),
-                Row(children: [
-                  Expanded(child: _field('Marca', _brandC, validator: _required)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _field('Modelo', _modelC, validator: _required)),
-                ]),
-                Row(children: [
-                  Expanded(child: _field('Año', _yearC, kb: TextInputType.number)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _field('Color', _colorC)),
-                ]),
-                Row(children: [
-                  Expanded(child: _field('Capacidad (pax)', _seatC, kb: TextInputType.number)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _status,
-                      decoration: _dec('Estado'),
-                      items: const ['Activo','En mantenimiento','Inactivo']
-                          .map((e)=> DropdownMenuItem(value: e, child: Text(e))).toList(),
-                      onChanged: _editMode ? (v)=> setState(()=> _status = v ?? _status) : null,
-                      validator: _editMode ? (v)=> v==null||v.isEmpty? 'Seleccione estado':null : null,
-                      dropdownColor: _kCard,
-                      style: const TextStyle(color: _kTextMain),
-                    ),
-                  ),
-                ]),
-
-                /* ── Mantenimiento ── */
-                _sectionLabel('Mantenimiento'),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12.0,
+                  runSpacing: 12.0,
+                  children: [
+                    _buildHalfWidthField(_field('Marca', _brandC, validator: _required)),
+                    _buildHalfWidthField(_field('Modelo', _modelC, validator: _required)),
+                    _buildHalfWidthField(_field('Año', _yearC, kb: TextInputType.number)),
+                    _buildHalfWidthField(_field('Color', _colorC)),
+                    _buildHalfWidthField(_field('Capacidad (pax)', _seatC, kb: TextInputType.number)),
+                    _buildHalfWidthField(_buildStatusDropdown()),
+                  ],
+                ),
+                _buildSectionLabel('Mantenimiento'),
                 _field('Última inspección', _inspC, isDate: true),
                 _field('Próxima visita taller', _workshopC, isDate: true),
-                Row(children: [
-                  Expanded(child: _field('GPS Sensor ID', _gpsC)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _field('Speed Sensor ID', _speedC)),
-                ]),
-
-                /* ── Asignación ── */
-                _sectionLabel('Asignación'),
+                _buildSectionLabel('Asignación'),
                 _field('Conductor', _driverC),
-
-                 /* ── Telemetría & creación ── */
-                _sectionLabel('Info de seguimiento'),
-
-                /// ────────────────  Última ubicación (título + mapa / placeholder) ────────────────
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    'Última ubicación',
-                    style: const TextStyle(
-                      color: _kTextSub,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-
-                if (v.lastLatitude != null && v.lastLongitude != null)
-                  _MiniMap(lat: v.lastLatitude!, lon: v.lastLongitude!)
-                else
-                  Container(
-                    height: 200,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: _kCard,
-                      borderRadius: BorderRadius.circular(_kRadius),
-                    ),
-                    child: const Text(
-                      'No se pudo encontrar la ubicación del vehículo',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: _kTextSub),
-                    ),
-                  ),
-
-                const SizedBox(height: 8),
-
-                /// ────────────────  Resto de lecturas  ────────────────
-                _readonlyInfo(
-                  'Altitud',
-                  v.lastAltitudeMeters != null
-                      ? '${v.lastAltitudeMeters!.toStringAsFixed(1)} m'
-                      : '--',
-                ),
-                _readonlyInfo(
-                  'Velocidad',
-                  v.lastKmh != null ? '${v.lastKmh!.toStringAsFixed(1)} km/h' : '--',
-                ),
-                _readonlyInfo(
-                  'Última actualización',
-                  v.lastTelemetryTimestamp != null
-                      ? DateFormat('yyyy-MM-dd HH:mm').format(v.lastTelemetryTimestamp!)
-                      : '--',
-                ),
-                _readonlyInfo(
-                  'Fecha de creación',
-                  v.assignedAt != null ? _fmt.format(v.assignedAt!) : '--',
-                ),
-
-
-                /* ── Documentos ── */
-                _sectionLabel('Documentos'),
-                _buildDocumentTile(
-                  label: 'SOAT',
-                  existingData: v.documentSoat,
-                  pickedFile: _pickedSoat,
-                  onFilePicked: (f)=> setState(()=> _pickedSoat = f),
-                ),
-                _buildDocumentTile(
-                  label: 'Tarjeta de Propiedad',
-                  existingData: v.documentVehicleOwnershipCard,
-                  pickedFile: _pickedCard,
-                  onFilePicked: (f)=> setState(()=> _pickedCard = f),
-                ),
-
+                _buildSectionLabel('Info de seguimiento'),
+                _buildTelemetryInfo(),
+                _buildSectionLabel('Documentos'),
+                _buildDocumentTile(label: 'SOAT', existingData: v.documentSoat, pickedFile: _pickedSoat, onFilePicked: (f)=> setState(()=> _pickedSoat = f)),
+                _buildDocumentTile(label: 'Tarjeta de Propiedad', existingData: v.documentVehicleOwnershipCard, pickedFile: _pickedCard, onFilePicked: (f)=> setState(()=> _pickedCard = f)),
                 const SizedBox(height: 32),
                 _editMode ? _buildSaveCancel() : _buildClose(),
                 const SizedBox(height: 16),
@@ -451,60 +317,125 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
 /* ─────────────────────── Widgets auxiliares ─────────────────────── */
-  Widget _field(String lbl, TextEditingController c,
-      {TextInputType kb = TextInputType.text,
-        bool isDate = false,
-        String? Function(String?)? validator}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextFormField(
-        controller: c,
-        readOnly   : !_editMode || isDate,
-        keyboardType: kb,
-        validator  : _editMode ? validator : null,
-        style      : const TextStyle(color: _kTextMain),
-        decoration : _dec(lbl).copyWith(
-          suffixIcon: isDate
-              ? IconButton(icon: const Icon(Icons.calendar_today, color: _kAction),
-              onPressed: ()=> _pickDate(c))
-              : (_editMode ? const Icon(Icons.edit, color: _kTextSub, size: 20) : null),
+  Widget _buildHalfWidthField(Widget child) {
+    return SizedBox(
+      width: (MediaQuery.of(context).size.width / 2) - 16 - 6,
+      child: child,
+    );
+  }
+
+  Widget _field(String lbl, TextEditingController c, {TextInputType kb = TextInputType.text, bool isDate = false, String? Function(String?)? validator}) {
+    return TextFormField(
+      controller: c,
+      readOnly: !_editMode || isDate,
+      keyboardType: kb,
+      validator: _editMode ? validator : null,
+      style: const TextStyle(color: _kTextMain),
+      decoration: _dec(lbl).copyWith(
+        suffixIcon: isDate
+            ? IconButton(icon: const Icon(Icons.calendar_today, color: _kAction), onPressed: () => _pickDate(c))
+            : (_editMode ? const Icon(Icons.edit, color: _kTextSub, size: 20) : null),
+      ),
+    );
+  }
+
+  Widget _buildStatusDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _status,
+      decoration: _dec('Estado'),
+      items: const ['Activo','En mantenimiento','Inactivo']
+          .map((e)=> DropdownMenuItem(value: e, child: Text(e))).toList(),
+      onChanged: _editMode ? (v)=> setState(()=> _status = v ?? _status) : null,
+      validator: _editMode ? (v)=> v==null||v.isEmpty? 'Seleccione estado':null : null,
+      dropdownColor: _kCard,
+      style: const TextStyle(color: _kTextMain),
+    );
+  }
+
+  Widget _buildVehicleImage() {
+    return GestureDetector(
+      onTap: () async {
+        final f = await _pickImageFile();
+        if (f != null) setState(() => _pickedImg = f);
+      },
+      child: Container(
+        height: 200,
+        decoration: BoxDecoration(
+          color: _kCard,
+          borderRadius: BorderRadius.circular(_kRadius),
+          image: _pickedImg != null
+              ? DecorationImage(image: FileImage(_pickedImg!), fit: BoxFit.cover)
+              : (_thumbnail(v.vehicleImage) != null
+              ? DecorationImage(image: _thumbnail(v.vehicleImage)!, fit: BoxFit.cover)
+              : null),
+        ),
+        alignment: Alignment.center,
+        child: (_pickedImg == null && _thumbnail(v.vehicleImage) == null)
+            ? const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.camera_alt_outlined, color: _kTextSub, size: 40),
+            SizedBox(height: 8),
+            Text('Toca para cambiar la foto', style: TextStyle(color: _kTextSub)),
+          ],
+        )
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildTelemetryInfo() {
+    return Card(
+      color: _kCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_kRadius)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            if (v.lastLatitude != null && v.lastLongitude != null)
+              _MiniMap(lat: v.lastLatitude!, lon: v.lastLongitude!)
+            else
+              Container(
+                height: 150,
+                alignment: Alignment.center,
+                child: const Text('No hay datos de ubicación disponibles.', style: TextStyle(color: _kTextSub)),
+              ),
+            const Divider(height: 24, color: _kBg),
+            _readonlyInfo('Altitud', v.lastAltitudeMeters != null ? '${v.lastAltitudeMeters!.toStringAsFixed(1)} m' : '--'),
+            _readonlyInfo('Velocidad', v.lastKmh != null ? '${v.lastKmh!.toStringAsFixed(1)} km/h' : '--'),
+            _readonlyInfo('Última actualización', v.lastTelemetryTimestamp != null ? DateFormat('yyyy-MM-dd HH:mm').format(v.lastTelemetryTimestamp!) : '--'),
+          ],
         ),
       ),
     );
   }
 
   Widget _readonlyInfo(String label, String value) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.symmetric(vertical: 4.0),
     child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(child: Text(label, style: const TextStyle(color: _kTextSub))),
-        const SizedBox(width: 12),
-        Expanded(child: Text(value, style: const TextStyle(color: _kTextMain))),
+        Text(label, style: const TextStyle(color: _kTextSub)),
+        Text(value, style: const TextStyle(color: _kTextMain, fontWeight: FontWeight.w500)),
       ],
     ),
   );
 
   InputDecoration _dec(String lbl) => InputDecoration(
-    labelText   : lbl,
-    labelStyle  : const TextStyle(color: _kTextSub),
-    filled      : true,
-    fillColor   : _kCard,
-    border      : OutlineInputBorder(
-      borderRadius: BorderRadius.circular(_kRadius),
-      borderSide  : BorderSide.none,
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(_kRadius),
-      borderSide  : const BorderSide(color: _kAction),
-    ),
+    labelText: lbl,
+    labelStyle: const TextStyle(color: _kTextSub),
+    filled: true,
+    fillColor: _kBg,
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(_kRadius), borderSide: BorderSide.none),
+    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(_kRadius), borderSide: const BorderSide(color: _kAction)),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
   );
 
-  Widget _sectionLabel(String t)=> Padding(
-    padding: const EdgeInsets.only(bottom:8, top:12),
-    child  : Text(t, style: const TextStyle(color:_kAction,fontSize:14,fontWeight:FontWeight.bold)),
+  Widget _buildSectionLabel(String t) => Padding(
+    padding: const EdgeInsets.only(bottom: 12, top: 20),
+    child: Text(t, style: const TextStyle(color: _kAction, fontSize: 16, fontWeight: FontWeight.bold)),
   );
 
-/* -- buildDocumentTile sin cambios excepto que bloquea en modo lectura -- */
   Widget _buildDocumentTile({
     required String label,
     required String existingData,
@@ -512,17 +443,16 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     required ValueChanged<File?> onFilePicked,
   }) {
     final hasExistingData = existingData.isNotEmpty;
-    final hasPickedFile   = pickedFile != null;
-    final dataToShow      = hasPickedFile ? pickedFile : (hasExistingData ? existingData : null);
+    final hasPickedFile = pickedFile != null;
+    final dataToShow = hasPickedFile ? pickedFile : (hasExistingData ? existingData : null);
 
     return Card(
       color: _kCard,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_kRadius)),
       margin: const EdgeInsets.symmetric(vertical: 6),
-      child : ListTile(
+      child: ListTile(
         leading: Icon(
-          hasPickedFile ? Icons.check_circle
-              : (hasExistingData ? Icons.description : Icons.upload_file),
+          hasPickedFile ? Icons.check_circle : (hasExistingData ? Icons.description : Icons.upload_file),
           color: _kAction,
         ),
         title: Text(
@@ -531,8 +461,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: hasPickedFile
-            ? const Text('Nuevo archivo listo para guardar',
-            style: TextStyle(color: Colors.greenAccent))
+            ? const Text('Nuevo archivo listo para guardar', style: TextStyle(color: Colors.greenAccent))
             : (hasExistingData
             ? const Text('Documento registrado', style: TextStyle(color: _kTextSub))
             : const Text('No hay documento cargado', style: TextStyle(color: _kTextSub))),
@@ -541,15 +470,15 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
           children: [
             if (dataToShow != null)
               IconButton(
-                icon    : const Icon(Icons.visibility, color: Colors.blueAccent),
-                tooltip : 'Ver documento',
+                icon: const Icon(Icons.visibility, color: Colors.blueAccent),
+                tooltip: 'Ver documento',
                 onPressed: () => _viewFile(dataToShow, '${label.replaceAll(' ', '_')}.pdf'),
               ),
             if (_editMode)
               IconButton(
-                icon    : Icon(hasExistingData || hasPickedFile ? Icons.replay : Icons.upload),
-                tooltip : hasExistingData || hasPickedFile ? 'Reemplazar' : 'Subir',
-                color   : _kTextSub,
+                icon: Icon(hasExistingData || hasPickedFile ? Icons.replay : Icons.upload),
+                tooltip: hasExistingData || hasPickedFile ? 'Reemplazar' : 'Subir',
+                color: _kTextSub,
                 onPressed: () async {
                   final file = await _pickDocumentFile();
                   onFilePicked(file);
@@ -561,14 +490,11 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     );
   }
 
-/* ---------- Botones finales ---------- */
   Widget _buildSaveCancel() => Row(
     children: [
       Expanded(
         child: OutlinedButton(
-          onPressed: () => setState(() {
-            _editMode = false;
-          }),
+          onPressed: () => setState(() { _editMode = false; }),
           style: OutlinedButton.styleFrom(
             side: const BorderSide(color: _kTextSub),
             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -581,13 +507,12 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       Expanded(
         child: ElevatedButton.icon(
           onPressed: _save,
-          icon : const Icon(Icons.save, color: Colors.black),
-          label: const Text('Guardar',
-              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          icon: const Icon(Icons.save, color: Colors.black),
+          label: const Text('Guardar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           style: ElevatedButton.styleFrom(
             backgroundColor: _kAction,
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape : RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
           ),
         ),
       ),
@@ -606,10 +531,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     ),
   );
 
-/* ─────────────────────── Validación simple ─────────────────────── */
-  String? _required(String? v) => (v == null || v.trim().isEmpty)
-      ? 'Este campo es requerido'
-      : null;
+  String? _required(String? v) => (v == null || v.trim().isEmpty) ? 'Este campo es requerido' : null;
 }
 
 class _MiniMap extends StatelessWidget {
@@ -618,29 +540,19 @@ class _MiniMap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final camera = CameraPosition(
-      target: LatLng(lat, lon),
-      zoom: 15,
-    );
-
+    final camera = CameraPosition(target: LatLng(lat, lon), zoom: 15);
     return ClipRRect(
       borderRadius: BorderRadius.circular(_kRadius),
       child: SizedBox(
         height: 200,
         child: GoogleMap(
           initialCameraPosition: camera,
-          liteModeEnabled: true,          // modo estático (sin gestos pesados)
+          liteModeEnabled: true,
           compassEnabled: false,
           zoomControlsEnabled: false,
-          markers: {
-            Marker(
-              markerId: const MarkerId('veh'),
-              position: LatLng(lat, lon),
-            ),
-          },
+          markers: { Marker(markerId: const MarkerId('veh'), position: LatLng(lat, lon)) },
         ),
       ),
     );
   }
 }
-

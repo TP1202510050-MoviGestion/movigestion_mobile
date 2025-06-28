@@ -132,7 +132,7 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
         children: [
           Icon(Icons.group, color: _primaryColor),
           SizedBox(width: 12),
-          Text('Transportistas', style: TextStyle(color: _textColor)),
+          Text('Conductores', style: TextStyle(color: _textColor)),
         ],
       ),
       elevation: 0,
@@ -141,7 +141,7 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
 
   Widget _buildFloatingActionButton() {
     return Tooltip(
-      message: 'Añadir Transportista',
+      message: 'Añadir Conductor',
       child: FloatingActionButton(
         heroTag: 'addCarrier',
         backgroundColor: _primaryColor,
@@ -160,7 +160,7 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
     if (_carriers.isEmpty) {
       return const Center(
         child: Text(
-          'No se encontraron transportistas.',
+          'No se encontraron conductores.',
           style: TextStyle(color: _textMutedColor, fontSize: 16),
         ),
       );
@@ -275,7 +275,7 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: _cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: const Text('Nuevo Transportista', style: TextStyle(color: _primaryColor)),
+        title: const Text('Nuevo Conductor', style: TextStyle(color: _primaryColor)),
         content: SingleChildScrollView(
           child: Form(
             key: formKey,
@@ -363,7 +363,7 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        _showSnackBar('Transportista registrado con éxito.');
+        _showSnackBar('Conductor registrado con éxito.');
         await _fetchData(); // Refresca toda la lista
       } else {
         _showSnackBar('Error al registrar (${response.statusCode}): ${response.body}');
@@ -388,7 +388,7 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
     try {
       final response = await http.delete(Uri.parse('$_baseApiUrl/$id'));
       if (response.statusCode == 200 || response.statusCode == 204) {
-        _showSnackBar('Transportista eliminado.');
+        _showSnackBar('Conductor eliminado.');
       } else {
         // Si falla, revierte el cambio en la UI
         _showSnackBar('Error al eliminar. Inténtalo de nuevo.');
@@ -410,7 +410,7 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
     builder: (context) => AlertDialog(
       backgroundColor: _cardColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      title: const Text('Eliminar Transportista', style: TextStyle(color: _textColor)),
+      title: const Text('Eliminar Conductor', style: TextStyle(color: _textColor)),
       content: const Text('¿Estás seguro de que deseas eliminar a este transportista? Esta acción no se puede deshacer.', style: TextStyle(color: _textMutedColor)),
       actions: [
         TextButton(
