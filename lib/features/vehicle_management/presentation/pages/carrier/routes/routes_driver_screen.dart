@@ -197,7 +197,8 @@ class _RouteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusStyle = _getStatusStyle(route.status);
-    final fmt = DateFormat.Hm();
+    final dateFmt = DateFormat('dd/MM/yy');
+    final timeFmt = DateFormat.Hm();
     final titleStyle = const TextStyle(color: _kTextMain, fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: 0.5);
     final subtitleStyle = TextStyle(color: _kTextSub.withOpacity(0.8), fontSize: 14);
     final chipTextStyle = TextStyle(color: _kTextSub, fontSize: 13);
@@ -228,7 +229,14 @@ class _RouteCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    route.departureTime != null ? fmt.format(route.departureTime!) : '--:--',
+                    route.departureTime != null ? dateFmt.format(route.departureTime!) : 'Sin fecha',
+                    style: TextStyle(color: _kTextSub.withOpacity(0.7), fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // 3. Mantenemos el widget de la hora
+                  Text(
+                    route.departureTime != null ? timeFmt.format(route.departureTime!) : '--:--',
                     style: const TextStyle(color: _kTextSub, fontSize: 15, fontWeight: FontWeight.w500),
                   ),
                 ],

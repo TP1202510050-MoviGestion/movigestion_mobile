@@ -26,11 +26,15 @@ class AppColors {
 class AppDrawer extends StatefulWidget {
   final String name;
   final String lastName;
+  final String companyName;
+  final String companyRuc;
 
   const AppDrawer({
     Key? key,
     required this.name,
     required this.lastName,
+    required this.companyName,
+    required this.companyRuc,
   }) : super(key: key);
 
   @override
@@ -200,9 +204,12 @@ class _AppDrawerState extends State<AppDrawer> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ChangeNotifierProvider(
-                    create: (_) => ChatProvider(),
-                    child: const ChatScreen(),
+                  builder: (_) => ChatScreen(
+                    userName: widget.name,
+                    userLastName: widget.lastName,
+                    userType: 'Gerente',
+                    companyName: widget.companyName,
+                    companyRuc: widget.companyRuc,
                   ),
                 ),
               );
@@ -219,11 +226,15 @@ class _AppDrawerState extends State<AppDrawer> {
             context,
             icon: Icons.logout,
             title: 'CERRAR SESIÓN',
-            onTap: () => Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (_) => LoginScreen(onLoginClicked: (_, __) {}, onRegisterClicked: () {})),
-                  (route) => false,
-            ),
+            onTap: () {
+              // PASO 6: Limpiar el chat antes de cerrar sesión
+              context.read<ChatProvider>().clearChat();
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => LoginScreen(onLoginClicked: (_, __) {}, onRegisterClicked: () {})),
+                    (route) => false,
+              );
+            },
           ),
         ],
       ),

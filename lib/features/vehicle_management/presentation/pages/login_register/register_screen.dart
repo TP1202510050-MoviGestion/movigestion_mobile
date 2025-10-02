@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/user_registration_screen.dart';
 
+import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
+
+
+
 class RegisterScreen extends StatefulWidget {
   final VoidCallback onNextClicked;
 
@@ -65,13 +69,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
               Image.asset('assets/images/login_logo.png', height: 100),
               const SizedBox(height: 32),
               const Text(
-                'Regístrate como',
-                style: TextStyle(color: Colors.white70, fontSize: 18),
+                'Selecciona tu rol para continuar',
+                style: TextStyle(color: Colors.white70, fontSize: 17),
               ),
               const SizedBox(height: 16),
               _roleCard(
                 icon: Icons.admin_panel_settings,
-                label: 'Administrador de Flota',
+                label: 'Administrador',
                 selected: _selectedRole == 'Gerente',
                 onTap: () => _onRoleSelected('Gerente'),
               ),
@@ -83,11 +87,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 onTap: () => _onRoleSelected('Transportista'),
               ),
               const Spacer(),
-              const Text(
-                'Selecciona tu rol para continuar',
-                style: TextStyle(color: Colors.white38, fontSize: 12),
-              ),
               const SizedBox(height: 20),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => LoginScreen(
+                        onLoginClicked: (username, password) {
+                          print('Usuario: $username, Contraseña: $password');
+                        },
+                        onRegisterClicked: () {
+                          print('Registrarse');
+                        },
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('¿Ya eres usuario? – Inicia Sesión',
+                    style: TextStyle(
+                      color: Colors.white,
+                      decoration: TextDecoration.underline,
+                    )),
+              ),
             ],
           ),
         ),

@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 
 // Importa los servicios y pantallas necesarios
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
+import 'package:provider/provider.dart';
 
 
+import '../../features/chat/chat_screen.dart';
 import '../../features/vehicle_management/presentation/pages/businessman/carrier_profiles/carrier_profiles.dart';
 import '../../features/vehicle_management/presentation/pages/businessman/profile/profile_screen.dart';
 import '../../features/vehicle_management/presentation/pages/businessman/reports/reports_screen.dart';
@@ -16,6 +18,7 @@ import '../../features/vehicle_management/presentation/pages/carrier/routes/rout
 import '../../features/vehicle_management/presentation/pages/carrier/shipments/shipments_screen2.dart';
 import '../../features/vehicle_management/presentation/pages/carrier/vehicle/vehicle_detail_carrier_screen.dart';
 import '../../features/vehicle_management/presentation/pages/login_register/login_screen.dart';
+import '../../providers/chat_provider.dart';
 
 // Constantes de estilo
 class AppColors {
@@ -182,17 +185,50 @@ class _AppDrawer2State extends State<AppDrawer2> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => RoutesDriverScreen(name: widget.name, lastName: widget.lastName)));
             },
           ),
+
+          /* ─────────── 2️⃣ NUEVO ITEM CHATBOT ─────────── */
+          _drawerItem(
+            context,
+            icon: Icons.chat_bubble_outline,
+            title: 'CHATBOT',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  // PASO 3: Ya no se crea un ChangeNotifierProvider aquí
+                  builder: (_) => ChatScreen(
+                    userName: widget.name,
+                    userLastName: widget.lastName,
+                    userType: 'Transportista',
+                    companyName: null,
+                    companyRuc: null,
+                  ),
+                ),
+              );
+            },
+          ),
+          /* ──────────────────────────────────────────── */
+
+
+
+
+
+
           const SizedBox(height: 160),
 
           _drawerItem(
             context,
             icon: Icons.logout,
             title: 'CERRAR SESIÓN',
-            onTap: () => Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (_) => LoginScreen(onLoginClicked: (_, __) {}, onRegisterClicked: () {})),
-                  (route) => false,
-            ),
+            onTap: () {
+              // PASO 6: Limpiar el chat antes de cerrar sesión
+              context.read<ChatProvider>().clearChat();
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => LoginScreen(onLoginClicked: (_, __) {}, onRegisterClicked: () {})),
+                    (route) => false,
+              );
+            },
           ),
         ],
       ),

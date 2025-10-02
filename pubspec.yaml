@@ -30,8 +30,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+    # --- CORRECCIÓN AQUÍ ---
+  flutter_localizations:
+    sdk: flutter
+
   http: ^0.13.6
-  intl: ^0.17.0  # Añade esta línea
+  intl: ^0.19.0
   image_picker: ^0.8.5+3 # Asegúrate de usar la versión más reciente
   file_picker: ^5.0.0  # Verifica que sea la última versión disponible
   url_launcher: ^6.1.10
@@ -53,6 +58,7 @@ dependencies:
   dialogflow_grpc: ^0.2.9      # cliente oficial gRPC
   protobuf: ^2.1.0             # versión requerida por dialogflow_grpc
   flutter_markdown: ^0.7.1
+  
 
 
 

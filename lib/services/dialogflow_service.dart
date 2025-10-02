@@ -1,91 +1,115 @@
-// lib/core/services/dialogflow_service.dart
+// lib/features/chat/services/dialogflow_service.dart
 
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:googleapis_auth/auth_io.dart';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
-// Modelo para una respuesta estructurada de Dialogflow
+/// Representa la respuesta simplificada de nuestro webhook.
+/// Ahora incluye un campo opcional para datos estructurados (payload).
 class DialogflowResponse {
+  /// El texto de respuesta principal para mostrar como texto simple.
   final String text;
-  final String? action;
-  final Map<String, dynamic> parameters;
+  /// Un mapa opcional con datos estructurados para renderizar widgets personalizados.
+  final Map<String, dynamic>? payload;
 
-  DialogflowResponse({
-    required this.text,
-    this.action,
-    this.parameters = const {},
-  });
+  DialogflowResponse({ required this.text, this.payload });
 }
 
-/// Dialogflow ES vía REST (cuenta de servicio)
+/// Servicio para interactuar DIRECTAMENTE con nuestro Webhook en Azure.
 class DialogflowRestService {
-  /* ── singleton ─────────────────────────────────────────────────── */
+  /* ── Singleton Pattern ─────────────────────────────────────────────────── */
   DialogflowRestService._internal();
   static final DialogflowRestService _i = DialogflowRestService._internal();
   factory DialogflowRestService() => _i;
 
-  /* ── configuración ─────────────────────────────────────────────── */
-  // Asegúrate de que esta ruta sea correcta en tu proyecto
-  static const _jsonKey = 'assets/keys/green-source-462801-q9-55866c61f206.json';
-  static const _scopes = ['https://www.googleapis.com/auth/cloud-platform'];
+  // --- CONFIGURACIÓN ---
+  final String _webhookUrl = 'https://app-250626000818.azurewebsites.net/api/dialogflow-webhook';
+  final String _projectId = 'green-source-462801-q9';
 
-  late final String _projectId;
-  late final AutoRefreshingAuthClient _client;
-  bool _ready = false;
+  /// Envía una consulta de texto a nuestro webhook.
+  Future<DialogflowResponse> detectIntent(String text, {required Map<String, dynamic> queryParams, String sessionId = 'flutter_session'}) async {
+    // Lógica simple para adivinar el intent basado en palabras clave
+    String intentName = "AnalisisGeneral";
+    if (text.contains("ruta")) intentName = "ConsultarRutas";
+    if (text.contains("reporte") || text.contains("incidente")) intentName = "ConsultarReportes";
+    if (text.contains("vehículo") || text.contains("flota")) intentName = "ConsultarVehiculos";
 
-  /* ── inicialización perezosa ───────────────────────────────────── */
-  Future<void> _bootstrap() async {
-    try {
-      final jsonStr = await rootBundle.loadString(_jsonKey);
-      final Map<String, dynamic> jsonMap = jsonDecode(jsonStr);
+    final requestBody = {
+      "queryResult": {
+        "queryText": text,
+        "intent": { "displayName": intentName },
+        "queryParams": { "payload": queryParams }
+      },
+      "session": "projects/$_projectId/agent/sessions/$sessionId"
+    };
 
-      _projectId = jsonMap['project_id'] as String;
-      final credentials = ServiceAccountCredentials.fromJson(jsonStr);
-
-      _client = await clientViaServiceAccount(credentials, _scopes);
-      _ready = true;
-    } catch (e) {
-      print('Error al inicializar DialogflowService: $e');
-      rethrow;
-    }
+    return _sendRequest(requestBody);
   }
 
-  Future<void> _ensureReady() => _ready ? Future.value() : _bootstrap();
+  /// Envía un evento a nuestro webhook para iniciar la conversación.
+  Future<DialogflowResponse> detectEvent(String eventName, {required Map<String, dynamic> parameters, String sessionId = 'flutter_session'}) async {
+    final requestBody = {
+      "queryResult": {
+        "intent": { "displayName": eventName },
+        "outputContexts": [{
+          "name": "projects/$_projectId/agent/sessions/$sessionId/contexts/evento-bienvenida-app",
+          "parameters": parameters
+        }]
+      },
+      "session": "projects/$_projectId/agent/sessions/$sessionId"
+    };
 
-  /* ── API pública MODIFICADA ───────────────────────────────────── */
-  Future<DialogflowResponse> detectIntent(String text, {String sessionId = 'flutter_session'}) async {
-    await _ensureReady();
+    return _sendRequest(requestBody);
+  }
 
-    final uri = Uri.parse(
-      'https://dialogflow.googleapis.com/v2/projects/'
-          '$_projectId/agent/sessions/$sessionId:detectIntent',
-    );
+  /// Método base para enviar la petición POST a nuestro webhook y parsear la respuesta.
+  Future<DialogflowResponse> _sendRequest(Map<String, dynamic> requestBody) async {
+    try {
+      final response = await http.post(
+        Uri.parse(_webhookUrl),
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+        body: jsonEncode(requestBody),
+      );
 
-    final body = jsonEncode({
-      'queryInput': {
-        'text': {'text': text, 'languageCode': 'es'}
+      if (response.statusCode != 200) {
+        debugPrint('Webhook API Error (${response.statusCode}): ${response.body}');
+        throw Exception('Error en la comunicación con el webhook.');
       }
-    });
 
-    final response = await _client.post(
-      uri,
-      headers: {'Content-Type': 'application/json; charset=utf-8'},
-      body: body,
-    );
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final fulfillmentMessages = data['fulfillmentMessages'] as List<dynamic>?;
 
-    if (response.statusCode != 200) {
-      throw Exception('Dialogflow error ${response.statusCode}: ${response.body}');
+      String fulfillmentText = '(sin respuesta del asistente)';
+      Map<String, dynamic>? payload;
+
+      if (fulfillmentMessages != null && fulfillmentMessages.isNotEmpty) {
+        final firstMessage = fulfillmentMessages.first as Map<String, dynamic>;
+
+        // --- LÓGICA DE EXTRACCIÓN MEJORADA ---
+        if (firstMessage.containsKey('payload')) {
+          // Si hay un payload, lo extraemos.
+          payload = firstMessage['payload'] as Map<String, dynamic>;
+          // Usamos un texto genérico, ya que la UI se construirá a partir del payload.
+          fulfillmentText = "Aquí tienes la información que solicitaste:";
+        } else if (firstMessage.containsKey('text')) {
+          // Si no hay payload, extraemos el texto simple.
+          final textData = firstMessage['text'] as Map<String, dynamic>?;
+          final textList = textData?['text'] as List<dynamic>?;
+          if (textList != null && textList.isNotEmpty) {
+            fulfillmentText = textList.first as String;
+          }
+        }
+      }
+
+      return DialogflowResponse(
+        text: fulfillmentText,
+        payload: payload,
+      );
+
+    } catch (e) {
+      debugPrint('Error en _sendRequest: $e');
+      return DialogflowResponse(text: '(Error de conexión con el asistente)');
     }
-
-    final decodedBody = utf8.decode(response.bodyBytes);
-    final data = jsonDecode(decodedBody) as Map<String, dynamic>;
-    final queryResult = data['queryResult'] as Map<String, dynamic>?;
-
-    return DialogflowResponse(
-      text: queryResult?['fulfillmentText'] as String? ?? '(sin respuesta)',
-      action: queryResult?['action'] as String?,
-      parameters: queryResult?['parameters'] as Map<String, dynamic>? ?? {},
-    );
   }
 }

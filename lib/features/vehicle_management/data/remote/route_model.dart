@@ -141,16 +141,31 @@ class RouteModel {
   /* ------------------------------------------------------------------ */
 
   factory RouteModel.fromJson(Map<String, dynamic> json) {
-    // Waypoints puede venir como List<dynamic> o String JSON
     List<Waypoint> parseWaypoints(dynamic raw) {
       if (raw == null) return [];
       final dynamic data = raw is String ? jsonDecode(raw) : raw;
       if (data is List) {
-        return data
-            .map((e) => Waypoint.fromJson(e as Map<String, dynamic>))
-            .toList();
+        return data.map((e) => Waypoint.fromJson(e as Map<String, dynamic>)).toList();
       }
       return [];
+    }
+
+    // --- FUNCIÓN HELPER PARA PARSEAR FECHAS DE FORMA SEGURA ---
+    // Esta función intercepta las fechas inválidas antes de que se creen.
+    DateTime? parseSafeDateTime(String? dateString) {
+      if (dateString == null || dateString.isEmpty) {
+        return null;
+      }
+      // Si la fecha que viene de la API es la fecha "Epoch", la tratamos como nula.
+      if (dateString.startsWith('1970-01-01')) {
+        return null;
+      }
+      try {
+        return DateTime.parse(dateString);
+      } catch (e) {
+        // Si hay cualquier otro error de parseo, también devolvemos nulo.
+        return null;
+      }
     }
 
     return RouteModel(
@@ -164,26 +179,22 @@ class RouteModel {
       driverName   : json['driverName'] as String?,
       vehicleId    : json['vehicleId'] as int?,
       vehiclePlate : json['vehiclePlate'] as String?,
-      departureTime: json['departureTime'] != null
-          ? DateTime.parse(json['departureTime'] as String)
-          : null,
-      arrivalTime  : json['arrivalTime'] != null
-          ? DateTime.parse(json['arrivalTime'] as String)
-          : null,
+
+      // APLICAMOS NUESTRA LÓGICA SEGURA A TODOS LOS CAMPOS DE FECHA
+      departureTime: parseSafeDateTime(json['departureTime'] as String?),
+      arrivalTime  : parseSafeDateTime(json['arrivalTime'] as String?),
+
       waypoints    : parseWaypoints(json['waypoints']),
       lastLatitude : (json['lastLatitude'] as num?)?.toDouble(),
       lastLongitude: (json['lastLongitude'] as num?)?.toDouble(),
-      createdAt    : json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : null,
-      updatedAt    : json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
-          : null,
+
+      createdAt    : parseSafeDateTime(json['createdAt'] as String?),
+      updatedAt    : parseSafeDateTime(json['updatedAt'] as String?),
+
       companyName  : json['companyName'] as String? ?? '',
       companyRuc   : json['companyRuc'] as String? ?? '',
     );
   }
-
   Map<String, dynamic> toJson() => {
     if (id != null) 'id': id,
     'type'         : type,

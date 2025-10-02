@@ -1,15 +1,11 @@
 // lib/features/route_management/presentation/pages/businessman/route/route_detail_screen.dart
-/* -------------------------------------------------------------- */
-/*               DETALLE / EDICIÓN DE UNA RUTA EXISTENTE          */
-/*                  (lógica y diseño unificados v4)               */
-/* -------------------------------------------------------------- */
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_place/google_place.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../../../../core/google_maps_config.dart';
 import '../../../../../../core/widgets/app_drawer.dart';
@@ -54,12 +50,15 @@ class RouteDetailScreen extends StatefulWidget {
 }
 
 class _RouteDetailScreenState extends State<RouteDetailScreen> {
-  // --- Estado y Controladores ---
   final _svc = RouteService();
   final _fmtTime = DateFormat('HH:mm');
+  // PASO 1: Añadir formateador para la fecha completa
+  final _fmtDate = DateFormat('EEEE, d \'de\' MMMM \'de\' y', 'es_ES');
   final _formKey = GlobalKey<FormState>();
 
-  late TextEditingController _customerC, _shiftC, _departureC, _arrivalC;
+  // PASO 1 (cont.): Añadir estado para la fecha
+  late TextEditingController _customerC, _shiftC, _dateC, _departureC, _arrivalC;
+  late DateTime _selectedDate;
   late String _type;
   bool _isEditing = false;
   bool _isSaving = false;
@@ -78,12 +77,18 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshRouteAndCamera());
   }
 
+  // PASO 2: Inicializar el estado de la fecha correctamente
   void _initializeStateFromRoute(RouteModel r) {
     _type = r.type;
     _customerC = TextEditingController(text: r.customer);
     _shiftC = TextEditingController(text: r.shift);
+
+    // La fecha de la ruta se toma del departureTime original
+    _selectedDate = r.departureTime!;
+    _dateC = TextEditingController(text: _fmtDate.format(_selectedDate));
     _departureC = TextEditingController(text: _fmtTime.format(r.departureTime!));
     _arrivalC = TextEditingController(text: _fmtTime.format(r.arrivalTime!));
+
     _editableWaypoints = r.waypoints
         .map((wp) => _EditableStopPoint(wp))
         .toList();
@@ -93,6 +98,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   void dispose() {
     _customerC.dispose();
     _shiftC.dispose();
+    _dateC.dispose();
     _departureC.dispose();
     _arrivalC.dispose();
     for (var p in _editableWaypoints) {
@@ -101,11 +107,11 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     super.dispose();
   }
 
-  void _startNewAutocompleteSession() => _sessionToken = const Uuid().v4();
+  // PASO 6: Eliminar la dependencia 'uuid'
+  void _startNewAutocompleteSession() => _sessionToken = null; // Siempre nulo
 
   Future<List<AutocompletePrediction>> _searchPlaces(String query) async {
     if (query.trim().isEmpty || !_isEditing) return [];
-    if (_sessionToken == null) _startNewAutocompleteSession();
     try {
       final resp = await googlePlace.autocomplete.get(
         query,
@@ -121,10 +127,9 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   }
 
   Future<void> _selectPrediction(_EditableStopPoint p, AutocompletePrediction choice) async {
-    if (_sessionToken == null || choice.placeId == null) return;
+    if (choice.placeId == null) return;
     try {
       final det = await googlePlace.details.get(choice.placeId!, sessionToken: _sessionToken);
-      _sessionToken = null;
       final loc = det?.result?.geometry?.location;
       if (loc == null) return;
       setState(() {
@@ -137,6 +142,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     }
   }
 
+  // ... (Las funciones de mapa, waypoints, etc., no cambian) ...
   void _onMapTap(LatLng pos) async {
     final name = await _askForText('Nombre del nuevo punto');
     if (name == null || name.trim().isEmpty) return;
@@ -222,6 +228,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     _mapCtrl!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
   }
 
+  // PASO 5: Corregir la lógica de guardado
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || !_isEditing) return;
     if (_editableWaypoints.length < 2) {
@@ -230,6 +237,18 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     }
 
     setState(() => _isSaving = true);
+
+    // Lógica para combinar la fecha seleccionada con las horas
+    final routeDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final depTime = _fmtTime.parse(_departureC.text);
+    final arrTime = _fmtTime.parse(_arrivalC.text);
+
+    DateTime departureDateTime = routeDate.add(Duration(hours: depTime.hour, minutes: depTime.minute));
+    DateTime arrivalDateTime = routeDate.add(Duration(hours: arrTime.hour, minutes: arrTime.minute));
+
+    if (arrivalDateTime.isBefore(departureDateTime)) {
+      arrivalDateTime = arrivalDateTime.add(const Duration(days: 1));
+    }
 
     final waypointsToSave = _editableWaypoints.asMap().entries.map((entry) {
       int idx = entry.key;
@@ -246,8 +265,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       type: _type,
       customer: _customerC.text.trim(),
       shift: _shiftC.text.trim(),
-      departureTime: _fmtTime.parse(_departureC.text),
-      arrivalTime: _fmtTime.parse(_arrivalC.text),
+      departureTime: departureDateTime, // Usar el DateTime completo
+      arrivalTime: arrivalDateTime,     // Usar el DateTime completo
       waypoints: waypointsToSave,
       lastLatitude: waypointsToSave.first.latitude,
       lastLongitude: waypointsToSave.first.longitude,
@@ -268,6 +287,25 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       _msg('Error de red al guardar: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  // PASO 3: Crear la función para el selector de fecha
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: now.subtract(const Duration(days: 30)), // Permite ver/editar rutas recientes
+      lastDate: DateTime(now.year + 5),
+      locale: const Locale('es', 'ES'),
+    );
+
+    if (pickedDate != null) {
+      setState(() {
+        _selectedDate = pickedDate;
+        _dateC.text = _fmtDate.format(pickedDate);
+      });
     }
   }
 
@@ -326,7 +364,12 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
             }))
         ],
       ),
-      drawer: AppDrawer(name: widget.name, lastName: widget.lastName),
+      drawer: AppDrawer(
+        name: widget.name,
+        lastName: widget.lastName,
+        companyName: widget.route.companyName, // Usamos el dato de la ruta actual
+        companyRuc: widget.route.companyRuc,     // Usamos el dato de la ruta actual
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -337,6 +380,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
               _buildDropdownType(),
               _txt('Cliente', _customerC),
               _buildPersonnelCounterField(),
+              // PASO 4: Añadir el campo de fecha a la UI
+              _txt('Fecha de la Ruta', _dateC, readOnly: true, icon: Icons.calendar_today_outlined, onTap: _isEditing ? _pickDate : null),
               Row(
                 children: [
                   Expanded(child: _txt('Hora de Salida', _departureC, readOnly: true, icon: Icons.schedule_outlined, onTap: _isEditing ? () => _pickTime(_departureC) : null)),
@@ -381,6 +426,8 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
     );
   }
 
+  // --- Widgets constructores ---
+
   Widget _buildSectionTitle(String title, {String? subtitle}) {
     return Padding(
       padding: const EdgeInsets.only(top: 24, bottom: 8, left: 4),
@@ -404,7 +451,7 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_kRadius)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(children: children),
+        child: Column(children: children.map((e) => Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: e)).toList()),
       ),
     );
   }
@@ -435,59 +482,54 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   }
 
   Widget _buildPersonnelCounterField() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Número de personal a recoger', style: TextStyle(color: _kTextSub, fontSize: 12)),
-          const SizedBox(height: 4),
-          TextFormField(
-            controller: _shiftC,
-            readOnly: true,
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: _isEditing ? _kTextMain : _kTextSub, fontSize: 18, fontWeight: FontWeight.bold),
-            decoration: _dec('').copyWith(
-              prefixIcon: _isEditing
-                  ? SizedBox(
-                width: 48,
-                child: IconButton(
-                  icon: const Icon(Icons.keyboard_arrow_down, color: _kAction),
-                  onPressed: () {
-                    final currentVal = int.tryParse(_shiftC.text) ?? 1;
-                    if (currentVal > 1) {
-                      setState(() => _shiftC.text = (currentVal - 1).toString());
-                    }
-                  },
-                ),
-              )
-                  : null,
-              suffixIcon: _isEditing
-                  ? SizedBox(
-                width: 48,
-                child: IconButton(
-                  icon: const Icon(Icons.keyboard_arrow_up, color: _kAction),
-                  onPressed: () {
-                    final currentVal = int.tryParse(_shiftC.text) ?? 0;
-                    if (currentVal < 150) {
-                      setState(() => _shiftC.text = (currentVal + 1).toString());
-                    }
-                  },
-                ),
-              )
-                  : null,
-            ),
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Requerido';
-              final val = int.tryParse(v);
-              if (val == null || val <= 0) return 'Debe ser > 0';
-              if (val > 150) return 'Máx. 150';
-              return null;
-            },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Número de personal a recoger', style: TextStyle(color: _kTextSub, fontSize: 12)),
+        const SizedBox(height: 4),
+        TextFormField(
+          controller: _shiftC,
+          readOnly: !_isEditing, // Permitir edición solo en modo edición
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: _isEditing ? _kTextMain : _kTextSub, fontSize: 18, fontWeight: FontWeight.bold),
+          decoration: _dec('').copyWith(
+            prefixIcon: _isEditing
+                ? SizedBox(
+              width: 48,
+              child: IconButton(
+                icon: const Icon(Icons.remove, color: _kAction, size: 20),
+                onPressed: () {
+                  final currentVal = int.tryParse(_shiftC.text) ?? 1;
+                  if (currentVal > 1) {
+                    setState(() => _shiftC.text = (currentVal - 1).toString());
+                  }
+                },
+              ),
+            ) : null,
+            suffixIcon: _isEditing
+                ? SizedBox(
+              width: 48,
+              child: IconButton(
+                icon: const Icon(Icons.add, color: _kAction, size: 20),
+                onPressed: () {
+                  final currentVal = int.tryParse(_shiftC.text) ?? 0;
+                  if (currentVal < 150) {
+                    setState(() => _shiftC.text = (currentVal + 1).toString());
+                  }
+                },
+              ),
+            ) : null,
           ),
-        ],
-      ),
+          validator: (v) {
+            if (v == null || v.isEmpty) return 'Requerido';
+            final val = int.tryParse(v);
+            if (val == null || val <= 0) return 'Debe ser > 0';
+            if (val > 150) return 'Máx. 150';
+            return null;
+          },
+        ),
+      ],
     );
   }
 
@@ -564,19 +606,16 @@ class _RouteDetailScreenState extends State<RouteDetailScreen> {
   }
 
   Widget _txt(String lbl, TextEditingController c, {TextInputType kb = TextInputType.text, bool readOnly = false, IconData? icon, VoidCallback? onTap}) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: TextFormField(
-        controller: c,
-        readOnly: readOnly || !_isEditing,
-        keyboardType: kb,
-        style: TextStyle(color: _isEditing ? _kTextMain : _kTextSub),
-        decoration: _dec(lbl).copyWith(
-          suffixIcon: icon != null ? Icon(icon, color: _kAction) : null,
-        ),
-        validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
-        onTap: onTap,
+    return TextFormField(
+      controller: c,
+      readOnly: readOnly || !_isEditing,
+      keyboardType: kb,
+      style: TextStyle(color: _isEditing ? _kTextMain : _kTextSub),
+      decoration: _dec(lbl).copyWith(
+        suffixIcon: icon != null ? Icon(icon, color: _kAction) : null,
       ),
+      validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
+      onTap: onTap,
     );
   }
 

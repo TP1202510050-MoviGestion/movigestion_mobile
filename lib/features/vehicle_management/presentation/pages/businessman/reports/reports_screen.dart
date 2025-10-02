@@ -160,7 +160,12 @@ class _ReportsScreenState extends State<ReportsScreen>
     return Scaffold(
       backgroundColor: _backgroundColor,
       appBar: _buildAppBar(),
-      drawer: AppDrawer(name: widget.name, lastName: widget.lastName),
+      drawer: AppDrawer(
+        name: widget.name,
+        lastName: widget.lastName,
+        companyName: _companyName, // Usamos la variable de estado de la pantalla
+        companyRuc: _companyRuc,     // Usamos la variable de estado de la pantalla
+      ),
       body: _buildBody(),
     );
   }

@@ -7,22 +7,13 @@ import 'package:intl/intl.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehicle_model.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/vehicle_service.dart';
-
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
-
 import '../../../../../../core/widgets/app_drawer.dart';
 
 /// ------------------------------------------------------------------
 ///           PANTALLA DE REGISTRO DE VEHÍCULO - VERSIÓN MEJORADA
 /// ------------------------------------------------------------------
-/// Esta pantalla permite registrar un nuevo vehículo. Características de usabilidad:
-/// - Formulario agrupado en secciones lógicas para reducir la carga cognitiva.
-/// - Previsualización de la imagen del vehículo una vez cargada.
-/// - Opción para ver los documentos (SOAT, Tarjeta de Propiedad) antes de enviarlos.
-/// - Feedback claro sobre el estado de la carga de archivos y el proceso de guardado.
-/// ------------------------------------------------------------------
-
 class AssignVehicleScreen extends StatefulWidget {
   final void Function(VehicleModel) onVehicleAdded;
   final String name, lastName;
@@ -69,6 +60,10 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
   String _companyName = '';
   String _companyRuc = '';
 
+  // --- Drivers List ---
+  List<Map<String, dynamic>> _drivers = [];
+  int? _selectedDriverId;
+
   @override
   void initState() {
     super.initState();
@@ -81,10 +76,21 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
       widget.name,
       widget.lastName,
     );
+    final allCarriers = await _profile.getAllCarriers();
+    // Filtrar conductores de la misma compañía
+    final filtered = allCarriers.where((c) =>
+    c.companyName == prof?.companyName &&
+        c.companyRuc  == prof?.companyRuc
+    ).toList();
+
     if (!mounted) return;
     setState(() {
       _companyName = prof?.companyName ?? '';
-      _companyRuc = prof?.companyRuc ?? '';
+      _companyRuc  = prof?.companyRuc  ?? '';
+      _drivers = filtered.map((c) => {
+        'id': c.id,
+        'name': '${c.name} ${c.lastName}',
+      }).toList();
     });
   }
 
@@ -111,6 +117,18 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
           fontWeight: FontWeight.bold,
         ),
       ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white70),
+      filled: true,
+      fillColor: const Color(0xFF2F353F),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFFEA8E00))),
+      errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Colors.redAccent)),
     );
   }
 
@@ -214,7 +232,10 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
           leading: Icon(icon, color: const Color(0xFFEA8E00)),
           title: Text(
             currentFile == null ? label : currentFile.name,
-            style: TextStyle(color: currentFile == null ? Colors.white70 : Colors.white, fontStyle: currentFile == null ? FontStyle.italic : FontStyle.normal),
+            style: TextStyle(
+              color: currentFile == null ? Colors.white70 : Colors.white,
+              fontStyle: currentFile == null ? FontStyle.italic : FontStyle.normal,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
           trailing: currentFile != null
@@ -240,20 +261,7 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
     );
   }
 
-  InputDecoration _inputDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Colors.white70),
-      filled: true,
-      fillColor: const Color(0xFF2F353F),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFFEA8E00))),
-      errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Colors.redAccent)),
-    );
-  }
-
   // ===================== Logic Helpers =====================
-
   Future<void> _pickDate(TextEditingController ctl) async {
     final d = await showDatePicker(
       context: context,
@@ -288,25 +296,13 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
     }
   }
 
-// Reemplaza tu función _viewFile existente con esta:
   Future<void> _viewFile(PlatformFile file) async {
-    // Usamos getTemporaryDirectory() porque es compatible con todas las plataformas (móvil, escritorio y web).
-    // Es el lugar ideal para archivos que no necesitan persistir.
     try {
-      // 1. Obtener el directorio temporal
       final Directory dir = await getTemporaryDirectory();
-
-      // 2. Crear la ruta completa del archivo temporal
       final String tempPath = '${dir.path}/${file.name}';
       final File tempFile = File(tempPath);
-
-      // 3. Escribir los bytes del archivo cargado en el archivo temporal
       await tempFile.writeAsBytes(file.bytes!);
-
-      // 4. Usar open_filex para abrir el archivo.
-      // open_filex también necesita que la app se reinicie por completo la primera vez que se añade.
       final result = await OpenFilex.open(tempPath);
-
       if (result.type != ResultType.done && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('No se encontró una aplicación para abrir este archivo: ${result.message}'), backgroundColor: Colors.orangeAccent),
@@ -322,7 +318,6 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
   }
 
   // ===================== Form Submission =====================
-
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -356,7 +351,7 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
       vehicleImage: _vehicleImageFile != null ? base64Encode(_vehicleImageFile!.bytes!) : '',
       documentSoat: base64Encode(_soatFile!.bytes!),
       documentVehicleOwnershipCard: base64Encode(_ownershipCardFile!.bytes!),
-      assignedDriverId: null,
+      assignedDriverId: _selectedDriverId,
       assignedAt: DateTime.now(),
       dateToGoTheWorkshop: null,
       lastLocation: null,
@@ -382,7 +377,6 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
   }
 
   // ===================== Main Build Method =====================
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -393,7 +387,12 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      drawer: AppDrawer(name: widget.name, lastName: widget.lastName),
+      drawer: AppDrawer(
+        name: widget.name,
+        lastName: widget.lastName,
+        companyName: _companyName, // Usamos la variable de estado de la pantalla
+        companyRuc: _companyRuc,     // Usamos la variable de estado de la pantalla
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -406,9 +405,30 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
             _buildTextField('Año', _yearC, keyboardType: TextInputType.number),
             _buildTextField('Color', _colorC),
             _buildTextField('Capacidad de Asientos', _seatC, keyboardType: TextInputType.number),
-            _buildTextField('Nombre del Conductor Asignado', _drvC),
 
-
+            // Dropdown de conductores filtrado
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: DropdownButtonFormField<int>(
+                value: _selectedDriverId,
+                decoration: _inputDecoration('Nombre del Conductor Asignado'),
+                items: _drivers.map((d) => DropdownMenuItem<int>(
+                  value: d['id'] as int,
+                  child: Text(d['name'] as String),
+                )).toList(),
+                onChanged: (id) {
+                  if (id == null) return;
+                  final driver = _drivers.firstWhere((d) => d['id'] == id);
+                  setState(() {
+                    _selectedDriverId = id;
+                    _drvC.text = driver['name'] as String;
+                  });
+                },
+                validator: (v) => v == null ? 'Seleccione un conductor' : null,
+                dropdownColor: const Color(0xFF2F353F),
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
 
             _buildSectionHeader('Documentación'),
             _buildDateField('Fecha de Última Inspección Técnica', _inspC),
@@ -434,8 +454,6 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
       ),
     );
   }
-
-  // ===================== Action Buttons & Drawer =====================
 
   Widget _buildActionButtons() {
     return Row(
@@ -470,5 +488,4 @@ class _AssignVehicleScreenState extends State<AssignVehicleScreen> {
       ],
     );
   }
-
 }

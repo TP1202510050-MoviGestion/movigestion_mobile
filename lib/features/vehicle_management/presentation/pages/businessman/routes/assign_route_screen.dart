@@ -1,7 +1,5 @@
 // lib/features/route_management/presentation/pages/businessman/route/assign_route_screen.dart
-/* -------------------------------------------------------------- */
-/*         PANTALLA  ▸  CREAR / ASIGNAR RUTA   (Diseño Final v2)  */
-/* -------------------------------------------------------------- */
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
@@ -9,7 +7,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_place/google_place.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../../../../core/google_maps_config.dart';
 import '../../../../../../core/widgets/app_drawer.dart';
@@ -28,6 +25,7 @@ const _kTextMain = Colors.white;
 const _kTextSub = Colors.white70;
 const _kRadius = 12.0;
 
+// ViewModel para manejar la carga de datos iniciales
 class _RouteVM with ChangeNotifier {
   _RouteVM(this.profileSvc, this.vehicleSvc);
   final ProfileService profileSvc;
@@ -74,12 +72,12 @@ class _RouteVM with ChangeNotifier {
   VehicleModel? vehicleForDriver(int id) => _vehicleByDriver[id];
 }
 
+// Clase para manejar los puntos de parada
 class StopPoint {
   StopPoint(this.label) {
     controller = TextEditingController();
     focusNode = FocusNode();
   }
-
   final String label;
   late final TextEditingController controller;
   late final FocusNode focusNode;
@@ -91,6 +89,7 @@ class StopPoint {
   }
 }
 
+// Widget principal que provee el ViewModel
 class AssignRouteScreen extends StatelessWidget {
   final String name, lastName;
   const AssignRouteScreen({super.key, required this.name, required this.lastName});
@@ -105,6 +104,7 @@ class AssignRouteScreen extends StatelessWidget {
   }
 }
 
+// Widget con el estado del formulario
 class _AssignRouteBody extends StatefulWidget {
   final String userName, userLastName;
   const _AssignRouteBody({required this.userName, required this.userLastName});
@@ -116,15 +116,20 @@ class _AssignRouteBody extends StatefulWidget {
 class _AssignRouteBodyState extends State<_AssignRouteBody> {
   final _formKey = GlobalKey<FormState>();
   final _customerC = TextEditingController();
+  final _dateC = TextEditingController();
   final _depC = TextEditingController();
   final _arrC = TextEditingController();
+  DateTime? _selectedDate;
+
   final _start = StopPoint('Inicio');
   final _end = StopPoint('Destino');
   final List<StopPoint> _stops = [];
+
   String? _routeType;
   int? _driverId;
   String? _driverName;
   VehicleModel? _vehicle;
+
   GoogleMapController? _mapCtrl;
   final Set<Marker> _markers = {};
   final PolylinePoints _polylinePoints = PolylinePoints();
@@ -143,6 +148,7 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
   @override
   void dispose() {
     _customerC.dispose();
+    _dateC.dispose();
     _depC.dispose();
     _arrC.dispose();
     _personnelC.dispose();
@@ -154,11 +160,8 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
     super.dispose();
   }
 
-  void _startNewAutocompleteSession() => _sessionToken = const Uuid().v4();
-
   Future<List<AutocompletePrediction>> _searchPlaces(String query) async {
     if (query.trim().isEmpty) return [];
-    if (_sessionToken == null) _startNewAutocompleteSession();
     try {
       final resp = await googlePlace.autocomplete.get(query, language: 'es', components: [Component('country', 'pe')], types: 'geocode', sessionToken: _sessionToken);
       return resp?.predictions ?? [];
@@ -169,10 +172,9 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
   }
 
   Future<void> _selectPrediction(StopPoint p, AutocompletePrediction choice) async {
-    if (_sessionToken == null || choice.placeId == null) return;
+    if (choice.placeId == null) return;
     try {
       final det = await googlePlace.details.get(choice.placeId!, sessionToken: _sessionToken);
-      _sessionToken = null;
       final loc = det?.result?.geometry?.location;
       if (loc == null) return;
       final duplicated = [_start, _end, ..._stops].where((s) => s != p && s.latLng != null).any((s) => (s.latLng!.latitude - loc.lat!).abs() < 1e-5 && (s.latLng!.longitude - loc.lng!).abs() < 1e-5);
@@ -236,6 +238,24 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
     }
   }
 
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? now,
+      firstDate: now,
+      lastDate: DateTime(now.year + 5),
+      locale: const Locale('es', 'ES'),
+    );
+
+    if (pickedDate != null) {
+      setState(() {
+        _selectedDate = pickedDate;
+        _dateC.text = DateFormat('EEEE, d \'de\' MMMM \'de\' y', 'es_ES').format(pickedDate);
+      });
+    }
+  }
+
   Future<void> _pickTime(TextEditingController c) async {
     final now = TimeOfDay.now();
     final pick = await showTimePicker(context: context, initialTime: now);
@@ -255,9 +275,20 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
     if (!_formKey.currentState!.validate()) return;
     if (_start.latLng == null || _end.latLng == null) { _msg('Seleccione un punto de partida y destino válidos'); return; }
     if (_driverId == null) { _msg('Seleccione conductor'); return; }
-    final dep = vm.fmtTime.parse(_depC.text);
-    final arr = vm.fmtTime.parse(_arrC.text);
-    if (arr.isBefore(dep)) { _msg('La hora de llegada debe ser posterior a la de salida'); return; }
+    if (_selectedDate == null) { _msg('Por favor, seleccione una fecha para la ruta'); return; }
+
+    final routeDate = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+    final depTime = vm.fmtTime.parse(_depC.text);
+    final arrTime = vm.fmtTime.parse(_arrC.text);
+
+    DateTime departureDateTime = routeDate.add(Duration(hours: depTime.hour, minutes: depTime.minute));
+    DateTime arrivalDateTime = routeDate.add(Duration(hours: arrTime.hour, minutes: arrTime.minute));
+
+    if (arrivalDateTime.isBefore(departureDateTime)) {
+      arrivalDateTime = arrivalDateTime.add(const Duration(days: 1));
+      _msg('Nota: La hora de llegada es al día siguiente.');
+    }
+
     setState(() => _sending = true);
     final List<Waypoint> wps = [];
     int order = 1;
@@ -280,8 +311,8 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
       driverName: _driverName,
       vehicleId: _vehicle?.id,
       vehiclePlate: _vehicle?.licensePlate,
-      departureTime: dep,
-      arrivalTime: arr,
+      departureTime: departureDateTime,
+      arrivalTime: arrivalDateTime,
       waypoints: wps,
       lastLatitude: wps.first.latitude,
       lastLongitude: wps.first.longitude,
@@ -320,10 +351,13 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
             Text('Crear Nueva Ruta', style: TextStyle(color: _kTextMain, fontSize: 18)),
           ],
         ),
-
       ),
-      drawer: AppDrawer(name: widget.userName, lastName: widget.userLastName),
-
+      drawer: AppDrawer(
+        name: widget.userName,
+        lastName: widget.userLastName,
+        companyName: vm.companyName, // Usamos los datos del ViewModel
+        companyRuc: vm.companyRuc,     // Usamos los datos del ViewModel
+      ),
       body: vm.loading
           ? const Center(child: CircularProgressIndicator(color: _kAction))
           : (vm.error != null
@@ -359,7 +393,7 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
                 icon: _sending
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                     : const Icon(Icons.save_alt_outlined, color: Colors.black),
-                label: const Text('Guardar Ruta', style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
+                label: const Text('Crear Ruta', style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -411,6 +445,8 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
                   padding: const EdgeInsets.only(top: 12.0),
                   child: _buildVehicleInfoChip(),
                 ),
+              const SizedBox(height: 16),
+              _buildDatePicker(),
               const SizedBox(height: 16),
               Row(children: [
                 Expanded(child: _buildTimePicker(_depC, 'Hora de Salida')),
@@ -621,6 +657,17 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
     );
   }
 
+  Widget _buildDatePicker() {
+    return TextFormField(
+      controller: _dateC,
+      readOnly: true,
+      decoration: _dec('Fecha de la Ruta', Icons.calendar_today_outlined),
+      validator: (v) => v == null || v.isEmpty ? 'Seleccione una fecha' : null,
+      style: const TextStyle(color: _kTextMain, fontWeight: FontWeight.w500),
+      onTap: _pickDate,
+    );
+  }
+
   Widget _buildTimePicker(TextEditingController c, String label) {
     return TextFormField(
       controller: c,
@@ -656,9 +703,6 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
       onSelected: (c) => _selectPrediction(p, c),
       initialValue: TextEditingValue(text: p.controller.text),
       fieldViewBuilder: (ctx, ctl, focus, onFieldSubmitted) {
-        focus.addListener(() {
-          if (focus.hasFocus) { _startNewAutocompleteSession(); }
-        });
         return TextFormField(
           controller: ctl,
           focusNode: focus,
@@ -706,7 +750,6 @@ class _AssignRouteBodyState extends State<_AssignRouteBody> {
   );
 }
 
-// Extensión de String para capitalizar (local a este archivo)
 extension StringExtension on String {
   String capitalize3() {
     if (isEmpty) return this;

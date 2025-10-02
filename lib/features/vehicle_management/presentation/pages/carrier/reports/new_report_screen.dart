@@ -1,17 +1,26 @@
+// lib/features/vehicle_management/presentation/pages/carrier/reports/new_report_screen.dart
+
 import 'dart:convert';
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:movigestion_mobile/core/app_constants.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_model.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_service.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/reports/reports_carrier_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/shipments/shipments_screen2.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/vehicle/vehicle_detail_carrier_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/profile/profile_screen2.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
-
 import '../../../../../../core/widgets/app_drawer2.dart';
+
+// PASO 1: Usar las constantes de estilo unificadas
+const _kBg = Color(0xFF1E1F24);
+const _kCard = Color(0xFF2F353F);
+const _kBar = Color(0xFF2C2F38);
+const _kAction = Color(0xFFEA8E00);
+const _kTextMain = Colors.white;
+const _kTextSub = Colors.white70;
+const _kRadius = 12.0;
 
 class NewReportScreen extends StatefulWidget {
   final String name;
@@ -27,12 +36,10 @@ class NewReportScreen extends StatefulWidget {
   _NewReportScreenState createState() => _NewReportScreenState();
 }
 
-class _NewReportScreenState extends State<NewReportScreen>
-    with SingleTickerProviderStateMixin {
-  // form state
+class _NewReportScreenState extends State<NewReportScreen> {
+  final _formKey = GlobalKey<FormState>();
   String? _selectedReportType;
-  String? _mediaBase64;
-  String _mediaFileName = '';
+  File? _pickedMediaFile;
   final TextEditingController _descriptionController = TextEditingController();
   final List<String> _reportTypes = [
     'Problemas con el vehículo',
@@ -41,46 +48,60 @@ class _NewReportScreenState extends State<NewReportScreen>
     'Otro'
   ];
 
-  // servicio de reportes
   final ReportService _reportService = ReportService();
-
-  // datos heredados del perfil
   bool _loadingProfile = true;
+  bool _isCreating = false;
   String _companyName = '';
   String _companyRuc = '';
-  int?  _userId;
+  int? _userId;
 
-  // animación
-  late AnimationController _animationController;
+
+  // PASO 2: Añadir estado para los datos del gerente
+  String? _managerName;
+  String? _managerPhone;
+  String? _managerPhotoB64;
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    )..forward();
-
-    // arrancamos la carga de companyName, companyRuc y userId
-    _loadManagerData();
+    _loadProfileData();
   }
 
-  Future<void> _loadManagerData() async {
+  // PASO 3: Actualizar la carga de datos para incluir al gerente
+  Future<void> _loadProfileData() async {
     const base = '${AppConstants.baseUrl}${AppConstants.profile}';
     try {
       final res = await http.get(Uri.parse(base));
       if (res.statusCode == 200) {
-        final list = json.decode(res.body) as List;
+        final decodedBody = utf8.decode(res.bodyBytes);
+        final list = json.decode(decodedBody) as List;
+
         final me = list.firstWhere(
               (e) =>
           e['name'].toString().toLowerCase()     == widget.name.toLowerCase() &&
               e['lastName'].toString().toLowerCase() == widget.lastName.toLowerCase(),
           orElse: () => null,
         );
+
         if (me != null) {
           _companyName = me['companyName'] ?? '';
           _companyRuc  = me['companyRuc']  ?? '';
           _userId      = me['id']          as int?;
+
+          // Ahora, buscar al gerente de la misma empresa
+          final manager = list.firstWhere(
+                (e) =>
+            e['companyName'] == _companyName &&
+                e['companyRuc']  == _companyRuc  &&
+                e['type'] == 'Gerente',
+            orElse: () => null,
+          );
+
+          if (manager != null) {
+            _managerName = '${manager['name']} ${manager['lastName']}';
+            _managerPhone = manager['phone'];
+            _managerPhotoB64 = manager['profilePhoto'];
+          }
         }
       }
     } catch (e) {
@@ -90,35 +111,44 @@ class _NewReportScreenState extends State<NewReportScreen>
     }
   }
 
+
+
   @override
   void dispose() {
-    _animationController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
 
-  Future<String> _getLocation() async {
-    // futuro: implementar GPS
-    return 'Ubicación no encontrada';
+
+  // PASO 4: Crear la función para realizar llamadas
+  Future<void> _makeCall(String? phoneNumber) async {
+    if (phoneNumber == null || phoneNumber.isEmpty) {
+      _showMessage('Número de teléfono no disponible.');
+      return;
+    }
+    final uri = Uri.parse('tel:$phoneNumber');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      _showMessage('No se pudo realizar la llamada.');
+    }
   }
 
+  Future<String> _getLocation() async => 'Ubicación no encontrada';
+
   Future<String> _getVehiclePlate() async {
+    // Lógica para obtener placa sin cambios...
     try {
-      final res = await http.get(
-          Uri.parse('${AppConstants.baseUrl}${AppConstants.vehicle}')
-      );
+      final res = await http.get(Uri.parse('${AppConstants.baseUrl}${AppConstants.vehicle}'));
       if (res.statusCode == 200) {
-        final list = json.decode(res.body) as List;
+        final decodedBody = utf8.decode(res.bodyBytes);
+        final list = json.decode(decodedBody) as List;
         final match = list.firstWhere(
-              (v) => v['driverName']
-              .toString()
-              .trim()
-              .toLowerCase() ==
-              '${widget.name} ${widget.lastName}'.toLowerCase(),
+              (v) => (v['driverName'] ?? '').toString().trim().toLowerCase() == '${widget.name} ${widget.lastName}'.toLowerCase(),
           orElse: () => null,
         );
-        if (match != null && match['licensePlat'] != null) {
-          return match['licensePlat'];
+        if (match != null && match['licensePlate'] != null) {
+          return match['licensePlate'];
         }
       }
     } catch (_) {}
@@ -126,297 +156,277 @@ class _NewReportScreenState extends State<NewReportScreen>
   }
 
   Future<void> _pickMedia() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.media,
-      withData: true,
-    );
-    if (result != null) {
-      final file = result.files.single;
+    final result = await FilePicker.platform.pickFiles(type: FileType.media);
+    if (result != null && result.files.single.path != null) {
       setState(() {
-        _mediaFileName =
-            file.name;
-        _mediaBase64 =
-        file.bytes != null ? base64Encode(file.bytes!) : null;
+        _pickedMediaFile = File(result.files.single.path!);
       });
     }
   }
 
   Future<void> _createReport() async {
-    if (_loadingProfile) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cargando datos de la empresa…')),
-      );
-      return;
-    }
-    if (_selectedReportType == null ||
-        _descriptionController.text.isEmpty ||
-        _mediaBase64 == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Por favor, completa tipo, descripción y adjunta foto/video'
-          ),
-        ),
-      );
+    if (!_formKey.currentState!.validate()) return;
+    if (_pickedMediaFile == null) {
+      _showMessage('Por favor, adjunta una foto o video como evidencia.');
       return;
     }
 
-    final driverName  = '${widget.name} ${widget.lastName}';
-    final status      = 'Pendiente';
-    final location    = await _getLocation();
-    final vehiclePlate= await _getVehiclePlate();
+    setState(() => _isCreating = true);
 
     final newReport = ReportModel(
-      id: null,
-      userId:       _userId ?? 1,
+      userId:       _userId!,
       type:         _selectedReportType!,
-      description:  _descriptionController.text,
-      driverName:   driverName,
+      description:  _descriptionController.text.trim(),
+      driverName:   '${widget.name} ${widget.lastName}',
       createdAt:    DateTime.now(),
-      photoOrVideo: _mediaBase64!,
-      status:       status,
-      location:     location,
-      vehiclePlate: vehiclePlate,
+      photoOrVideo: base64Encode(_pickedMediaFile!.readAsBytesSync()),
+      status:       'Pendiente',
+      location:     await _getLocation(),
+      vehiclePlate: await _getVehiclePlate(),
       companyName:  _companyName,
       companyRuc:   _companyRuc,
     );
 
-    final success = await _reportService.createReport(newReport);
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reporte creado exitosamente')),
-      );
-      Navigator.pop(context, newReport);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error al crear el reporte')),
-      );
+    try {
+      final success = await _reportService.createReport(newReport);
+      if (success) {
+        _showMessage('Reporte creado exitosamente', isError: false);
+        Navigator.pop(context, true);
+      } else {
+        _showMessage('Error al crear el reporte. Inténtalo de nuevo.');
+      }
+    } catch (e) {
+      _showMessage('Error de conexión al crear el reporte: $e');
+    } finally {
+      if (mounted) setState(() => _isCreating = false);
     }
+  }
+
+  void _showMessage(String msg, {bool isError = true}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.redAccent : Colors.green,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // mientras cargan los datos del perfil mostramos un loader
-    if (_loadingProfile) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF1A1F24),
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFFEA8E00)),
-        ),
-      );
-    }
-
     return Scaffold(
+      backgroundColor: _kBg,
+      // PASO 2: Rediseñar la AppBar
       appBar: AppBar(
-        title: const Text('Nuevo Reporte', style: TextStyle(color: Colors.grey)),
-        backgroundColor: const Color(0xFF2C2F38),
-        leading: Builder(
-          builder: (ctx) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white),
-            onPressed: () => Scaffold.of(ctx).openDrawer(),
-          ),
-        ),
+        backgroundColor: _kBar,
+        title: const Text('Nuevo Reporte', style: TextStyle(color: _kTextMain)),
+        iconTheme: const IconThemeData(color: _kTextMain),
       ),
-      backgroundColor: const Color(0xFF1A1F24),
       drawer: AppDrawer2(name: widget.name, lastName: widget.lastName),
-      body: FadeTransition(
-        opacity: _animationController,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: Column(
-            children: [
-              Expanded(child: _buildReportForm()),
-              const SizedBox(height: 20),
-              _buildSubmitButton(),
-            ],
-          ),
-        ),
-      ),
+      body: _loadingProfile
+          ? const Center(child: CircularProgressIndicator(color: _kAction))
+          : _buildForm(),
+      // PASO 4: Rediseñar el botón de envío
+      bottomNavigationBar: _buildSubmitButton(),
     );
   }
 
-  Widget _buildReportForm() {
-    return Container(
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2C2F38),
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.4),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+  // PASO 3: Refactorizar completamente el formulario
+  Widget _buildForm() {
+    return Form(
+      key: _formKey,
+      child: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          _buildEmergencyCallsCard(),
+          _buildSectionCard(
+            title: 'Detalles del Reporte',
+            icon: Icons.edit_note,
+            children: [
+              DropdownButtonFormField<String>(
+                decoration: _inputDecoration('Tipo de Reporte'),
+                dropdownColor: _kCard,
+                value: _selectedReportType,
+                items: _reportTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                onChanged: (v) => setState(() => _selectedReportType = v),
+                style: const TextStyle(color: _kTextMain),
+                validator: (v) => v == null ? 'Por favor, selecciona un tipo' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descriptionController,
+                maxLines: 5,
+                decoration: _inputDecoration('Descripción del incidente'),
+                style: const TextStyle(color: _kTextMain),
+                validator: (v) => v == null || v.trim().isEmpty ? 'La descripción es requerida' : null,
+              ),
+            ],
+          ),
+          _buildSectionCard(
+            title: 'Evidencia',
+            icon: Icons.camera_alt_outlined,
+            children: [
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: _pickMedia,
+                  icon: const Icon(Icons.attach_file),
+                  label: const Text('Adjuntar Foto o Video'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _kAction,
+                    side: const BorderSide(color: _kAction),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
+                ),
+              ),
+              if (_pickedMediaFile != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Center(
+                    child: Chip(
+                      avatar: const Icon(Icons.check_circle, color: Colors.green),
+                      label: Text(
+                        _pickedMediaFile!.path.split('/').last,
+                        style: const TextStyle(color: _kTextSub),
+                      ),
+                      backgroundColor: _kBg,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
-      child: SingleChildScrollView(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text(
-            'Detalles del Reporte',
-            style: TextStyle(
-                color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600
+    );
+  }
+
+
+  // PASO 5 (cont.): Implementar el widget para la nueva tarjeta de llamadas
+  Widget _buildEmergencyCallsCard() {
+    ImageProvider managerImage = const AssetImage('assets/images/Gerente.png'); // Imagen por defecto
+    if (_managerPhotoB64 != null && _managerPhotoB64!.isNotEmpty) {
+      managerImage = MemoryImage(base64Decode(_managerPhotoB64!));
+    }
+
+    return Card(
+      color: _kCard,
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_kRadius)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.contact_phone_outlined, color: _kAction, size: 20),
+                SizedBox(width: 8),
+                Text('Contactos de Emergencia', style: TextStyle(color: _kTextMain, fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            decoration: InputDecoration(
-              labelText: 'Tipo de Reporte',
-              labelStyle: const TextStyle(color: Colors.white70),
-              filled: true,
-              fillColor: const Color(0xFF1A1F24),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+            const Divider(height: 24, color: _kBg),
+            ListTile(
+              leading: const CircleAvatar(
+                radius: 25,
+                backgroundColor: Colors.redAccent,
+                child: Icon(Icons.local_hospital, color: _kTextMain),
               ),
+              title: const Text('Llamar a Emergencias', style: TextStyle(color: _kTextMain, fontWeight: FontWeight.w500)),
+              subtitle: const Text('Número Nacional', style: TextStyle(color: _kTextSub)),
+              trailing: const Icon(Icons.call, color: Colors.redAccent),
+              onTap: () => _makeCall('112'), // Número de emergencia genérico
             ),
-            dropdownColor: const Color(0xFF1A1F24),
-            value: _selectedReportType,
-            items: _reportTypes.map((t) {
-              return DropdownMenuItem(
-                value: t,
-                child: Text(t, style: const TextStyle(color: Colors.white)),
-              );
-            }).toList(),
-            onChanged: (v) => setState(() => _selectedReportType = v),
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _descriptionController,
-            maxLines: 5,
-            decoration: InputDecoration(
-              labelText: 'Descripción',
-              labelStyle: const TextStyle(color: Colors.white70),
-              filled: true,
-              fillColor: const Color(0xFF1A1F24),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
+            const SizedBox(height: 12),
+            ListTile(
+              leading: CircleAvatar(
+                radius: 25,
+                backgroundImage: managerImage,
+                backgroundColor: _kBg,
               ),
+              title: Text(_managerName ?? 'Gerente', style: const TextStyle(color: _kTextMain, fontWeight: FontWeight.w500)),
+              subtitle: Text(_managerPhone ?? 'Número no disponible', style: TextStyle(color: _kTextSub)),
+              trailing: Icon(Icons.call, color: _kAction),
+              onTap: () => _makeCall(_managerPhone),
             ),
-            style: const TextStyle(color: Colors.white),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Foto/Video de incidencia',
-            style: TextStyle(color: Colors.white70, fontSize: 16),
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton.icon(
-            onPressed: _pickMedia,
-            icon: const Icon(Icons.attach_file),
-            label: const Text('Seleccionar archivo'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEA8E00),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30)
-              ),
-            ),
-          ),
-          if (_mediaFileName.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _mediaFileName,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ),
-        ]),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSubmitButton() => ElevatedButton(
-    onPressed: _createReport,
-    style: ElevatedButton.styleFrom(
-      backgroundColor: const Color(0xFFEA8E00),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-      minimumSize: const Size(double.infinity, 50),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      elevation: 5,
-    ),
-    child: const Text('Crear Nuevo Reporte', style: TextStyle(color: Colors.black)),
-  );
-
-  Drawer _buildDrawer(BuildContext context) {
-    return Drawer(
-      backgroundColor: const Color(0xFF2C2F38),
-      child: ListView(padding: EdgeInsets.zero, children: [
-        DrawerHeader(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset('assets/images/login_logo.png', height: 80),
-              const SizedBox(height: 10),
-              Text('${widget.name} ${widget.lastName}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 16)),
-            ],
-          ),
+  Widget _buildSectionCard({required String title, required IconData icon, required List<Widget> children}) {
+    return Card(
+      color: _kCard,
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_kRadius)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: _kAction, size: 20),
+                const SizedBox(width: 8),
+                Text(title, style: const TextStyle(color: _kTextMain, fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const Divider(height: 24, color: _kBg),
+            ...children,
+          ],
         ),
-        _buildDrawerItem(Icons.person, 'PERFIL', () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ProfileScreen2(
-                name: widget.name,
-                lastName: widget.lastName,
-              ),
-            ),
-          );
-        }),
-        _buildDrawerItem(Icons.report, 'REPORTES', () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ReportsCarrierScreen(
-                name: widget.name,
-                lastName: widget.lastName,
-              ),
-            ),
-          );
-        }),
-        _buildDrawerItem(Icons.directions_car, 'VEHÍCULOS', () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => VehicleDetailCarrierScreen(
-                name: widget.name,
-                lastName: widget.lastName,
-              ),
-            ),
-          );
-        }),
-        _buildDrawerItem(Icons.local_shipping, 'ENVIOS', () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ShipmentsScreen2(
-                name: widget.name,
-                lastName: widget.lastName,
-              ),
-            ),
-          );
-        }),
-        const Divider(color: Colors.white54),
-        _buildDrawerItem(Icons.logout, 'CERRAR SESIÓN', () {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(
-              builder: (_) => LoginScreen(
-                onLoginClicked: (_, __) {},
-                onRegisterClicked: () {},
-              ),
-            ),
-                (route) => false,
-          );
-        }),
-      ]),
+      ),
     );
   }
 
-  Widget _buildDrawerItem(IconData icon, String title, VoidCallback onTap) =>
-      ListTile(
-        leading: Icon(icon, color: Colors.white),
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        onTap: onTap,
-      );
+  InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: _kTextSub),
+      filled: true,
+      fillColor: _kBg,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(_kRadius), borderSide: BorderSide.none),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(_kRadius), borderSide: const BorderSide(color: _kAction)),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    // ESTE ES EL DISEÑO ADAPTADO DE RouteDriverDetailScreen
+    return Padding(
+      // Usamos un padding para separar el botón de los bordes de la pantalla
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      child: ElevatedButton(
+        onPressed: _isCreating ? null : _createReport,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _kAction,
+          foregroundColor: Colors.black, // Color del texto y el icono
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        ),
+        // Construimos el contenido del botón con un Row centrado
+        child: _isCreating
+            ? const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 3,
+            color: Colors.black,
+          ),
+        )
+            : const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.send),
+            SizedBox(width: 12),
+            Text(
+              'Enviar Reporte',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:collection/collection.dart';               // 👈 new
+import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'package:movigestion_mobile/core/app_constants.dart';
 import 'profile_model.dart';
@@ -113,4 +114,38 @@ class ProfileService {
     throw Exception(
         '[ProfileSvc] getAllProfiles failed (${response.statusCode})');
   }
+
+
+  Future<ProfileModel?> getProfileByFullName(String fullName) async {
+    try {
+      final res = await http.get(Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}'));
+      if (res.statusCode == 200) {
+        final decodedBody = utf8.decode(res.bodyBytes);
+        final list = jsonDecode(decodedBody) as List;
+
+        // Normalizamos el nombre completo que buscamos para una comparación insensible
+        final normalizedTargetName = fullName.trim().toLowerCase();
+
+        for (final profileJson in list) {
+          final profile = ProfileModel.fromJson(profileJson as Map<String, dynamic>);
+
+          // Construimos y normalizamos el nombre completo del perfil actual
+          final currentFullName = '${profile.name} ${profile.lastName}'.trim().toLowerCase();
+
+          // Si encontramos una coincidencia exacta, devolvemos el perfil
+          if (currentFullName == normalizedTargetName) {
+            return profile;
+          }
+        }
+      }
+    } catch (e) {
+      // Manejar el error si es necesario, por ahora lo dejamos silencioso
+      debugPrint('Error en getProfileByFullName: $e');
+    }
+    // Si no se encuentra ninguna coincidencia después de recorrer la lista, devolvemos null
+    return null;
+  }
+
+
+
 }

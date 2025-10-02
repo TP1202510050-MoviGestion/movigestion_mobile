@@ -77,14 +77,18 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   }
 
   Future<void> _fetchPhone() async {
-    final parts = _report.driverName.split(' ');
-    final prof = await _profileService.getProfileByNameAndLastName(
-      parts.first,
-      parts.length > 1 ? parts.last : '',
-    );
+    // 1. Verificamos que el nombre del conductor no esté vacío.
+    if (_report.driverName.trim().isEmpty) {
+      return;
+    }
+
+    // 2. Usamos el nuevo método del servicio, pasándole el nombre completo directamente.
+    final profile = await _profileService.getProfileByFullName(_report.driverName);
+
+    // 3. Actualizamos el estado con el resultado. La lógica aquí no cambia.
     if (mounted) {
       setState(() {
-        _phone = prof?.phone ?? '';
+        _phone = profile?.phone ?? '';
       });
     }
   }
@@ -185,7 +189,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         backgroundColor: AppColors.surface,
         elevation: 0,
       ),
-      drawer: AppDrawer(name: widget.name, lastName: widget.lastName),
+      drawer: AppDrawer(
+        name: widget.name,
+        lastName: widget.lastName,
+        companyName: _report.companyName, // Usamos el dato del reporte actual
+        companyRuc: _report.companyRuc,     // Usamos el dato del reporte actual
+      ),
       body: Stack(
         children: [
           SingleChildScrollView(
@@ -328,7 +337,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       ],
     );
   }
-
   Widget _buildActionButtons() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -346,7 +354,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               textStyle: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
+
         if (_report.status != 'Resuelto') const SizedBox(height: 12),
+
         Row(
           children: [
             Expanded(
@@ -355,8 +365,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 icon: const Icon(Icons.phone),
                 label: const Text('Llamar'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: AppColors.primary),
+                  // CAMBIO CLAVE 1: Usamos un color de alto contraste.
+                  // AppColors.textSecondary (blanco con 70% de opacidad) es perfecto.
+                  // Es muy visible sin ser tan llamativo como el blanco puro.
+                  backgroundColor: Colors.amber,
+                  foregroundColor: Colors.amber,
+                  side: const BorderSide(color: Colors.amber), // Borde del mismo color
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
@@ -369,8 +383,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 icon: const Icon(Icons.delete_outline),
                 label: const Text('Eliminar'),
                 style: OutlinedButton.styleFrom(
+                  // CAMBIO CLAVE 2: Mantenemos el color de peligro, que ya tiene
+                  // un contraste aceptable, pero aseguramos que se aplique correctamente.
                   foregroundColor: AppColors.danger,
-                  side: const BorderSide(color: AppColors.danger),
+                  side: const BorderSide(color: AppColors.danger), // Borde del mismo color
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
@@ -378,6 +394,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             ),
           ],
         ),
+
         const SizedBox(height: 24),
         const Divider(color: Colors.white24),
         const SizedBox(height: 8),

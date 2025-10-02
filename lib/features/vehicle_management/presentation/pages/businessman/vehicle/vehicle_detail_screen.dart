@@ -1,4 +1,3 @@
-// lib/features/vehicle_management/presentation/pages/businessman/vehicle/vehicle_detail_screen.dart
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -16,6 +15,7 @@ import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../../../core/widgets/app_drawer.dart';
+import '../../../../data/remote/profile_service.dart';
 import '../../../../data/remote/vehicle_model.dart';
 import '../../../../data/remote/vehicle_service.dart';
 
@@ -43,16 +43,16 @@ class VehicleDetailScreen extends StatefulWidget {
 }
 
 class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
-/* ─────────────────────── Controllers & State ─────────────────────── */
-  late final _plateC  = TextEditingController(text: v.licensePlate);
-  late final _brandC  = TextEditingController(text: v.brand);
-  late final _modelC  = TextEditingController(text: v.model);
-  late final _yearC   = TextEditingController(text: v.year.toString());
-  late final _colorC  = TextEditingController(text: v.color);
-  late final _seatC   = TextEditingController(text: v.seatingCapacity.toString());
-  late       String   _status   = v.status;
-  late final _driverC = TextEditingController(text: v.driverName);
-  late final _inspC   = TextEditingController(text: _fmt.format(v.lastTechnicalInspectionDate!));
+  /* ───────────────── Controllers & State ───────────────── */
+  late final _plateC    = TextEditingController(text: v.licensePlate);
+  late final _brandC    = TextEditingController(text: v.brand);
+  late final _modelC    = TextEditingController(text: v.model);
+  late final _yearC     = TextEditingController(text: v.year.toString());
+  late final _colorC    = TextEditingController(text: v.color);
+  late final _seatC     = TextEditingController(text: v.seatingCapacity.toString());
+  late       String     _status   = v.status;
+  late final _driverC   = TextEditingController(text: v.driverName);
+  late final _inspC     = TextEditingController(text: _fmt.format(v.lastTechnicalInspectionDate!));
   late final _workshopC = TextEditingController(
     text: v.dateToGoTheWorkshop != null ? _fmt.format(v.dateToGoTheWorkshop!) : '',
   );
@@ -61,19 +61,55 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   final _fmt     = DateFormat('yyyy-MM-dd');
   final _picker  = ImagePicker();
   final _svc     = VehicleService();
+  final _profileSvc = ProfileService();
 
   File? _pickedImg, _pickedSoat, _pickedCard;
   bool _editMode = false;
   final _shot = ScreenshotController();
 
+  // Lista de conductores filtrada
+  List<Map<String, dynamic>> _drivers = [];
+
   VehicleModel get v => widget.vehicle;
 
-/* ─────────────────────── Helpers UI/Files ─────────────────────── */
+  @override
+  void initState() {
+    super.initState();
+    _loadDrivers();
+  }
+
+  Future<void> _loadDrivers() async {
+    try {
+      final prof = await _profileSvc.getProfileByNameAndLastName(widget.name, widget.lastName);
+      final all = await _profileSvc.getAllCarriers();
+      final filtered = all.where((c) =>
+      c.companyName == prof?.companyName &&
+          c.companyRuc  == prof?.companyRuc
+      ).toList();
+      if (!mounted) return;
+      setState(() {
+        _drivers = filtered.map((c) => {
+          'id': c.id,
+          'name': '${c.name} ${c.lastName}',
+        }).toList();
+      });
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    for (final ctl in [_plateC,_brandC,_modelC,_yearC,_colorC,_seatC,_driverC,_inspC,_workshopC]) {
+      ctl.dispose();
+    }
+    super.dispose();
+  }
+
+  /* ───────────────── Helpers UI/Files ───────────────── */
   ImageProvider? _thumbnail(String raw) {
     if (raw.trim().isEmpty) return null;
     final uri = Uri.tryParse(raw);
     if (uri != null && uri.hasScheme) return NetworkImage(raw);
-    try   { return MemoryImage(base64Decode(base64.normalize(raw))); }
+    try { return MemoryImage(base64Decode(base64.normalize(raw))); }
     catch (_) { return null; }
   }
 
@@ -82,16 +118,14 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     final d = await showDatePicker(
       context: context,
       initialDate: DateTime.tryParse(c.text) ?? DateTime.now(),
-      firstDate : DateTime(2000),
-      lastDate  : DateTime(2100),
+      firstDate : DateTime(2000), lastDate: DateTime(2100),
       builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(
-              primary: _kAction, surface: _kCard,
-              onSurface: _kTextMain, onPrimary: Colors.black),
-        ),
-        child: child!,
-      ),
+          data: Theme.of(ctx).copyWith(
+            colorScheme: const ColorScheme.dark(
+                primary: _kAction, surface: _kCard,
+                onSurface: _kTextMain, onPrimary: Colors.black
+            ),
+          ), child: child!),
     );
     if (d != null) c.text = _fmt.format(d);
   }
@@ -104,10 +138,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
 
   Future<File?> _pickDocumentFile() async {
     if (!_editMode) return null;
-    final res = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf','doc','docx','png','jpg','jpeg'],
-    );
+    final res = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf','doc','docx','png','jpg','jpeg']);
     if (res != null && res.files.single.path != null) {
       return File(res.files.single.path!);
     }
@@ -122,90 +153,62 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       else if (data is String) await tmp.writeAsBytes(base64Decode(base64.normalize(data)));
       await OpenFilex.open(tmp.path);
     } catch(e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al abrir archivo: $e'), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al abrir archivo: \$e'), backgroundColor: Colors.red),
+      );
     }
   }
 
-/* ─────────────────────── Guardar ─────────────────────── */
+  /* ───────────────── Guardar ───────────────── */
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
+    showDialog(context: context, barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator(color: _kAction)),
     );
 
     final updated = v.copyWith(
-      licensePlate : _plateC.text.trim(),
-      brand        : _brandC.text.trim(),
-      model        : _modelC.text.trim(),
-      year         : int.tryParse(_yearC.text.trim()) ?? v.year,
-      color        : _colorC.text.trim(),
+      licensePlate: _plateC.text.trim(), brand: _brandC.text.trim(), model: _modelC.text.trim(),
+      year: int.tryParse(_yearC.text.trim()) ?? v.year, color: _colorC.text.trim(),
       seatingCapacity: int.tryParse(_seatC.text.trim()) ?? v.seatingCapacity,
-      status       : _status,
-      driverName   : _driverC.text.trim(),
+      status: _status,
+      driverName: _driverC.text.trim(),
       lastTechnicalInspectionDate: _fmt.parse(_inspC.text),
       dateToGoTheWorkshop: _workshopC.text.isNotEmpty ? _fmt.parse(_workshopC.text) : null,
-      vehicleImage : _pickedImg != null ? base64Encode(_pickedImg!.readAsBytesSync()) : v.vehicleImage,
-      documentSoat : _pickedSoat != null ? base64Encode(_pickedSoat!.readAsBytesSync()) : v.documentSoat,
-      documentVehicleOwnershipCard:
-      _pickedCard != null ? base64Encode(_pickedCard!.readAsBytesSync()) : v.documentVehicleOwnershipCard,
+      vehicleImage: _pickedImg!=null ? base64Encode(_pickedImg!.readAsBytesSync()) : v.vehicleImage,
+      documentSoat: _pickedSoat!=null ? base64Encode(_pickedSoat!.readAsBytesSync()) : v.documentSoat,
+      documentVehicleOwnershipCard: _pickedCard!=null ? base64Encode(_pickedCard!.readAsBytesSync()) : v.documentVehicleOwnershipCard,
     );
 
     final ok = await _svc.updateVehicle(v.id!, updated);
-
     if (!mounted) return;
     Navigator.pop(context);
-
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: ok ? Colors.green : Colors.redAccent,
-        content: Text(ok ? 'Vehículo actualizado con éxito' : 'Error al guardar los cambios'),
-      ),
+        SnackBar(backgroundColor: ok?Colors.green:Colors.redAccent, content: Text(ok?'Vehículo actualizado con éxito':'Error al guardar los cambios'))
     );
     if (ok) setState(() => _editMode = false);
   }
 
-/* ─────────────────────── Compartir (PNG + QR) ─────────────────────── */
+  /* ───────────────── Compartir (PNG + QR) ───────────────── */
   Future<void> _share() async {
     try {
-      final bytes = await _shot.capture(pixelRatio: 2.5);
+      final bytes = await _shot.capture(pixelRatio:2.5);
       if (bytes == null) return;
-
-      final qrPainter = QrPainter(
-        data: base64Encode(bytes),
-        version: QrVersions.auto,
-        color: _kBg,
-        emptyColor: Colors.white,
-      );
+      final qrPainter = QrPainter(data: base64Encode(bytes), version: QrVersions.auto, color: _kBg, emptyColor: Colors.white);
       final ui.Image qrImg = await qrPainter.toImage(600);
       final byteData = await qrImg.toByteData(format: ui.ImageByteFormat.png);
-      final qrBytes  = byteData!.buffer.asUint8List();
-
+      final qrBytes = byteData!.buffer.asUint8List();
       final dir = await getTemporaryDirectory();
-      final imgPath = '${dir.path}/veh_${v.id}.png';
-      final qrPath  = '${dir.path}/veh_${v.id}_qr.png';
+      final imgPath = '\${dir.path}/veh_\${v.id}.png';
+      final qrPath  = '\${dir.path}/veh_\${v.id}_qr.png';
       await File(imgPath).writeAsBytes(bytes);
       await File(qrPath).writeAsBytes(qrBytes);
-
-      await Share.shareXFiles(
-        [XFile(imgPath), XFile(qrPath)],
-        text: 'Información del vehículo ${v.licensePlate}',
-      );
-    } catch(e){
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al compartir: $e'), backgroundColor: Colors.redAccent),
-        );
-      }
-    }
+      await Share.shareXFiles([XFile(imgPath), XFile(qrPath)], text:'Información del vehículo \${v.licensePlate}');
+    } catch(e){ if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al compartir: \$e'), backgroundColor: Colors.redAccent)
+    );}
   }
 
+  /* ───────────────── Eliminar ───────────────── */
 /* ─────────────────────── Eliminar ─────────────────────── */
   Future<void> _confirmDelete() async {
     final ok = await showDialog<bool>(
@@ -241,80 +244,76 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     if (deleted) Navigator.pop(context, true);
   }
 
-/* ─────────────────────── BUILD ─────────────────────── */
+  /* ───────────────── BUILD ───────────────── */
   @override
   Widget build(BuildContext context) {
     return Screenshot(
-      controller: _shot,
+      controller:_shot,
       child: Scaffold(
         backgroundColor: _kBg,
-        appBar: AppBar(
-          backgroundColor: _kBar,
-          title: const Text('Detalle del Vehículo', style: TextStyle(color: _kTextMain)),
-          iconTheme: const IconThemeData(color: _kTextMain),
-          actions: [
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: _kTextMain),
-              onSelected: (v){
-                switch(v){
-                  case 'edit'  : setState(()=> _editMode = !_editMode); break;
-                  case 'share' : _share(); break;
-                  case 'delete': _confirmDelete(); break;
-                }
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(value: 'edit', child: Text(_editMode? 'Cancelar edición':'Editar')),
-                const PopupMenuItem(value: 'share',  child: Text('Compartir')),
-                const PopupMenuDivider(),
-                const PopupMenuItem(value: 'delete', textStyle: TextStyle(color: Colors.redAccent), child: Text('Eliminar')),
-              ],
-            )
-          ],
+        appBar: AppBar(backgroundColor:_kBar,title: const Text('Detalle del Vehículo',style:TextStyle(color:_kTextMain)),iconTheme:const IconThemeData(color:_kTextMain),actions:[
+          PopupMenuButton<String>(icon:const Icon(Icons.more_vert,color:_kTextMain),onSelected:(v){
+            switch(v){case'edit':setState(()=>_editMode=!_editMode);break;case'share':_share();break;case'delete':_confirmDelete();break;}
+          },itemBuilder:(_)=>[
+            PopupMenuItem(value:'edit',child:Text(_editMode?'Cancelar edición':'Editar')),
+            const PopupMenuItem(value:'share',child:Text('Compartir')),
+            const PopupMenuDivider(),
+            const PopupMenuItem(value:'delete',textStyle:TextStyle(color:Colors.redAccent),child:Text('Eliminar'))
+          ])
+        ]),
+        drawer: AppDrawer(
+          name: widget.name,
+          lastName: widget.lastName,
+          companyName: v.companyName, // Usamos la propiedad 'v' que es un alias de widget.vehicle
+          companyRuc: v.companyRuc,     // Usamos la propiedad 'v'
         ),
-        drawer: AppDrawer(name: widget.name, lastName: widget.lastName),
-        body: SafeArea(
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _buildVehicleImage(),
-                const SizedBox(height: 24),
-                _buildSectionLabel('Datos generales'),
-                _field('Placa', _plateC, validator: _required),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12.0,
-                  runSpacing: 12.0,
-                  children: [
-                    _buildHalfWidthField(_field('Marca', _brandC, validator: _required)),
-                    _buildHalfWidthField(_field('Modelo', _modelC, validator: _required)),
-                    _buildHalfWidthField(_field('Año', _yearC, kb: TextInputType.number)),
-                    _buildHalfWidthField(_field('Color', _colorC)),
-                    _buildHalfWidthField(_field('Capacidad (pax)', _seatC, kb: TextInputType.number)),
-                    _buildHalfWidthField(_buildStatusDropdown()),
-                  ],
-                ),
-                _buildSectionLabel('Mantenimiento'),
-                _field('Última inspección', _inspC, isDate: true),
-                _field('Próxima visita taller', _workshopC, isDate: true),
-                _buildSectionLabel('Asignación'),
-                _field('Conductor', _driverC),
-                _buildSectionLabel('Info de seguimiento'),
-                _buildTelemetryInfo(),
-                _buildSectionLabel('Documentos'),
-                _buildDocumentTile(label: 'SOAT', existingData: v.documentSoat, pickedFile: _pickedSoat, onFilePicked: (f)=> setState(()=> _pickedSoat = f)),
-                _buildDocumentTile(label: 'Tarjeta de Propiedad', existingData: v.documentVehicleOwnershipCard, pickedFile: _pickedCard, onFilePicked: (f)=> setState(()=> _pickedCard = f)),
-                const SizedBox(height: 32),
-                _editMode ? _buildSaveCancel() : _buildClose(),
-                const SizedBox(height: 16),
-              ],
+        body:SafeArea(child:Form(key:_formKey,child:ListView(padding:const EdgeInsets.all(16),children:[
+          _buildVehicleImage(),
+          const SizedBox(height:24),
+          _buildSectionLabel('Datos generales'),
+          _field('Placa',_plateC,validator:_required),
+          const SizedBox(height:12),
+          Wrap(spacing:12,runSpacing:12,children:[
+            _buildHalfWidthField(_field('Marca',_brandC,validator:_required)),
+            _buildHalfWidthField(_field('Modelo',_modelC,validator:_required)),
+            _buildHalfWidthField(_field('Año',_yearC,kb:TextInputType.number)),
+            _buildHalfWidthField(_field('Color',_colorC)),
+            _buildHalfWidthField(_field('Capacidad (pax)',_seatC,kb:TextInputType.number)),
+            SizedBox(width:(MediaQuery.of(context).size.width/2)-1,child:_buildStatusDropdown()),
+          ]),
+          _buildSectionLabel('Mantenimiento'),
+          Wrap(spacing:12,runSpacing:12,children:[
+            _buildHalfWidthField(_field('Última inspección',_inspC,isDate:true)),
+            _buildHalfWidthField(_field('Próxima visita taller',_workshopC,isDate:true)),
+          ]),
+          _buildSectionLabel('Asignación'),
+          // Dropdown de conductores
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical:8.0),
+            child: DropdownButtonFormField<String>(
+              value: _driverC.text.isEmpty? null : _driverC.text,
+              decoration: _dec('Conductor'),
+
+              items: _drivers.map((d) => DropdownMenuItem<String>(value:d['name'] as String,child:Text(d['name'] as String, style: const TextStyle(color: _kTextMain)))).toList(),
+              onChanged: _editMode? (name) => setState(()=> _driverC.text = name ?? '') : null,
+              validator: _editMode? (v) => v == null || v.isEmpty? 'Seleccione conductor': null : null,
+              dropdownColor: _kCard,
+              style: const TextStyle(color: _kTextMain),
             ),
           ),
-        ),
+          _buildSectionLabel('Info de seguimiento'),
+          _buildTelemetryInfo(),
+          _buildSectionLabel('Documentos'),
+          _buildDocumentTile(label:'SOAT',existingData:v.documentSoat,pickedFile:_pickedSoat,onFilePicked:(f)=>setState(()=>_pickedSoat=f)),
+          _buildDocumentTile(label:'Tarjeta de Propiedad',existingData:v.documentVehicleOwnershipCard,pickedFile:_pickedCard,onFilePicked:(f)=>setState(()=>_pickedCard=f)),
+          const SizedBox(height:32),
+          _editMode? _buildSaveCancel() : _buildClose(),
+          const SizedBox(height:16),
+        ]))),
       ),
     );
   }
+
 
 /* ─────────────────────── Widgets auxiliares ─────────────────────── */
   Widget _buildHalfWidthField(Widget child) {
@@ -344,11 +343,12 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       value: _status,
       decoration: _dec('Estado'),
       items: const ['Activo','En mantenimiento','Inactivo']
-          .map((e)=> DropdownMenuItem(value: e, child: Text(e))).toList(),
+          .map((e)=> DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(color: _kTextMain)),)).toList(),
       onChanged: _editMode ? (v)=> setState(()=> _status = v ?? _status) : null,
       validator: _editMode ? (v)=> v==null||v.isEmpty? 'Seleccione estado':null : null,
       dropdownColor: _kCard,
       style: const TextStyle(color: _kTextMain),
+
     );
   }
 

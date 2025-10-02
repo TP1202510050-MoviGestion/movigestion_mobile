@@ -1,13 +1,11 @@
+// lib/features/vehicle_management/presentation/pages/carrier/reports/reports_carrier_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_model.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/reports/new_report_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/shipments/shipments_screen2.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/vehicle/vehicle_detail_carrier_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/profile/profile_screen2.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
-
 import '../../../../../../core/widgets/app_drawer2.dart';
+import 'package:intl/intl.dart'; // Necesario para formatear la fecha
 
 class ReportsCarrierScreen extends StatefulWidget {
   final String name;
@@ -24,19 +22,25 @@ class ReportsCarrierScreen extends StatefulWidget {
 }
 
 class _ReportsCarrierScreenState extends State<ReportsCarrierScreen> with SingleTickerProviderStateMixin {
-  List<ReportModel> _allReports = [];
-  List<ReportModel> _filtered = [];
-  bool _isLoading = true;
-  late AnimationController _anim;
-  late Animation<double> _fade;
+  // PASO 1: Usar las mismas constantes de estilo que en ReportsScreen
+  static const _primaryColor = Color(0xFFEA8E00);
+  static const _backgroundColor = Color(0xFF1E1F24);
+  static const _cardColor = Color(0xFF2C2F38);
+  static const _textColor = Colors.white;
+  static const _textMutedColor = Colors.white70;
 
-  // Filtros reales
+  final ReportService _reportService = ReportService();
+  List<ReportModel> _allReports = [];
+  List<ReportModel> _filteredReports = [];
+  bool _isLoading = true;
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+
   String? _filterType;
   String? _filterStatus;
   String  _sortOrder = 'Recientes';
 
-  // Opciones para el modal
-  List<String> get _types   => _allReports.map((r) => r.type).toSet().toList()..sort();
+  List<String> get _reportTypes => _allReports.map((r) => r.type).toSet().toList()..sort();
   final List<String> _statuses = ['Pendiente', 'En Proceso', 'Resuelto'];
   final List<String> _dateOptions = ['Recientes', 'Antiguos'];
 
@@ -45,25 +49,31 @@ class _ReportsCarrierScreenState extends State<ReportsCarrierScreen> with Single
   @override
   void initState() {
     super.initState();
-    _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-    _fade = CurvedAnimation(parent: _anim, curve: Curves.easeInOut);
-    _fetch();
+    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+    _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeInOut);
+    _fetchReports();
   }
 
-  Future<void> _fetch() async {
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchReports() async {
     setState(() => _isLoading = true);
     try {
-      final svc = ReportService();
-      final all = await svc.getAllReports();
+      final all = await _reportService.getAllReports();
       _allReports = all.where((r) => r.driverName.toLowerCase() == _fullNameLower).toList();
       _applyFilters();
-    } catch (_) {
-      // manejar error
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al cargar reportes: $e')));
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
-      _anim.forward();
+      if(mounted) {
+        setState(() => _isLoading = false);
+        _animationController.forward();
+      }
     }
   }
 
@@ -75,181 +85,144 @@ class _ReportsCarrierScreenState extends State<ReportsCarrierScreen> with Single
       final cmp = a.createdAt.compareTo(b.createdAt);
       return _sortOrder == 'Recientes' ? -cmp : cmp;
     });
-    setState(() => _filtered = list);
+    setState(() => _filteredReports = list);
   }
 
-  Future<void> _newReport() async {
-    final rpt = await Navigator.push<ReportModel?>(
+  Future<void> _navigateToNewReport() async {
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => NewReportScreen(name: widget.name, lastName: widget.lastName)),
     );
-    if (rpt != null && rpt.driverName.toLowerCase() == _fullNameLower) {
-      _allReports.add(rpt);
-      _applyFilters();
+    // Si se creó un nuevo reporte, refrescamos la lista
+    if (result == true) {
+      _fetchReports();
     }
-  }
-
-  @override
-  void dispose() {
-    _anim.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF2C2F38),
-        title: Row(
-          children: [
-            const Icon(Icons.report, color: Colors.amber),
-            const SizedBox(width: 10),
-            Text(
-              'Tus Reportes',
-              style: TextStyle(color: Colors.grey, fontSize: 22, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list, color: Colors.white),
-            onPressed: _showFilterModal,
-          )
-        ],
-      ),
-      backgroundColor: const Color(0xFF1A1F24),
+      backgroundColor: _backgroundColor,
+      appBar: _buildAppBar(),
       drawer: AppDrawer2(name: widget.name, lastName: widget.lastName),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.amber, strokeWidth: 3))
-          : FadeTransition(
-        opacity: _fade,
-        child: _filtered.isEmpty
-            ? const Center(
-          child: Text(
-            'No realizaste ningún reporte.',
-            style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-        )
-            : ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: _filtered.length,
-          itemBuilder: (ctx, i) => _buildCard(_filtered[i]),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _newReport,
-        backgroundColor: const Color(0xFFFFA000),
-        child: const Icon(Icons.add, color: Colors.black),
+      body: _buildBody(),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _navigateToNewReport,
+        backgroundColor: _primaryColor,
+        icon: const Icon(Icons.add, color: Colors.black),
+        label: const Text('Nuevo Reporte', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  void _showFilterModal() {
-    // variables temp dentro del modal
-    String? tmpType    = _filterType;
-    String? tmpStatus  = _filterStatus;
-    String  tmpOrder   = _sortOrder;
+  // PASO 2: Rediseñar la AppBar
+  AppBar _buildAppBar() {
+    return AppBar(
+      backgroundColor: _cardColor,
+      title: const Row(
+        children: [
+          Icon(Icons.assessment_outlined, color: _primaryColor),
+          SizedBox(width: 12),
+          Text('Mis Reportes', style: TextStyle(color: _textColor)),
+        ],
+      ),
+      actions: [
+        IconButton(
+          tooltip: 'Filtrar reportes',
+          icon: const Icon(Icons.filter_list, color: _textColor),
+          onPressed: _isLoading ? null : _showFilterModal,
+        ),
+      ],
+      elevation: 0,
+    );
+  }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        maxChildSize: 0.8,
-        builder: (c, scroll) => Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF2C2F38),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: ListView(
-            controller: scroll,
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: _primaryColor));
+    }
+    if (_filteredReports.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, color: _textMutedColor, size: 80),
+            SizedBox(height: 16),
+            Text(
+              'No has realizado ningún reporte',
+              style: TextStyle(color: _textMutedColor, fontSize: 18),
+            ),
+            Text(
+              'Usa el botón "+" para crear uno nuevo.',
+              style: TextStyle(color: _textMutedColor),
+            ),
+          ],
+        ),
+      );
+    }
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _filteredReports.length,
+        itemBuilder: (ctx, i) => _buildReportCard(_filteredReports[i]),
+      ),
+    );
+  }
+
+  // PASO 3: Rediseñar la tarjeta de reporte
+  Widget _buildReportCard(ReportModel report) {
+    return Card(
+      color: _cardColor,
+      margin: const EdgeInsets.only(bottom: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          // Aquí puedes añadir navegación al detalle si lo creas en el futuro
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: _primaryColor.withOpacity(0.15),
+                child: Icon(_getIconForReportType(report.type), color: _primaryColor, size: 26),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      report.type,
+                      style: const TextStyle(color: _textColor, fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Reportado por: ${report.driverName}',
+                      style: const TextStyle(color: _textMutedColor, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.calendar_today, size: 12, color: _textMutedColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          DateFormat('yyyy-MM-dd').format(report.createdAt.toLocal()),
+                          style: const TextStyle(fontSize: 12, color: _textMutedColor),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const Text('Filtrar por...', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 24),
-
-              // Tipo
-              const Text('Tipo', style: TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                children: [null, ..._types].map((t) {
-                  return ChoiceChip(
-                    label: Text(t ?? 'Todos'),
-                    selected: tmpType == t,
-                    onSelected: (_) => setState(() => tmpType = t),
-                    selectedColor: Colors.amber,
-                    backgroundColor: Colors.white10,
-                    labelStyle: TextStyle(color: tmpType == t ? Colors.black : Colors.grey),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-
-              // Estado
-              const Text('Estado', style: TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                children: [null, ..._statuses].map((s) {
-                  return ChoiceChip(
-                    label: Text(s ?? 'Todos'),
-                    selected: tmpStatus == s,
-                    onSelected: (_) => setState(() => tmpStatus = s),
-                    selectedColor: Colors.amber,
-                    backgroundColor: Colors.white10,
-                    labelStyle: TextStyle(color: tmpStatus == s ? Colors.black : Colors.grey),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-
-              // Fecha
-              const Text('Ordenar por fecha', style: TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: _dateOptions.map((o) {
-                  return ChoiceChip(
-                    label: Text(o),
-                    selected: tmpOrder == o,
-                    onSelected: (_) => setState(() => tmpOrder = o),
-                    selectedColor: Colors.amber,
-                    backgroundColor: Colors.white10,
-                    labelStyle: TextStyle(color: tmpOrder == o ? Colors.black : Colors.grey),
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: () {
-                  // aplicar seleccion
-                  _filterType   = tmpType;
-                  _filterStatus = tmpStatus;
-                  _sortOrder    = tmpOrder;
-                  _applyFilters();
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.amber,
-                  minimumSize: const Size.fromHeight(50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Aplicar filtros', style: TextStyle(color: Colors.black, fontSize: 16)),
-              ),
+              const SizedBox(width: 12),
+              _buildStatusBadge(report.status),
             ],
           ),
         ),
@@ -257,95 +230,129 @@ class _ReportsCarrierScreenState extends State<ReportsCarrierScreen> with Single
     );
   }
 
-  Widget _buildCard(ReportModel r) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(colors: [Colors.amber.shade400, Colors.amber.shade700]),
-              ),
-              padding: const EdgeInsets.all(8),
-              child: const Icon(Icons.report, color: Colors.black),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(r.type, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade100,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(r.status, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-            ),
-          ]),
-          const SizedBox(height: 8),
-          Text(r.description, maxLines: 3, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 12),
-          Row(children: [
-            const Icon(Icons.calendar_today, size: 14, color: Colors.black54),
-            const SizedBox(width: 4),
-            Text(
-              '${r.createdAt.toLocal()}'.split('.')[0],
-              style: const TextStyle(fontSize: 12, color: Colors.black54),
-            ),
-          ]),
-        ]),
+  IconData _getIconForReportType(String type) {
+    switch (type.toLowerCase()) {
+      case 'accidente': return Icons.car_crash_outlined;
+      case 'mantenimiento preventivo': return Icons.build_outlined;
+      case 'falla mecánica': return Icons.settings_outlined;
+      case 'problema de llantas': return Icons.tire_repair_outlined;
+      default: return Icons.report_problem_outlined;
+    }
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color badgeColor;
+    switch (status) {
+      case 'Pendiente': badgeColor = Colors.orange.shade700; break;
+      case 'En Proceso': badgeColor = Colors.blue.shade700; break;
+      case 'Resuelto': badgeColor = Colors.green.shade700; break;
+      default: badgeColor = Colors.grey.shade700;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: badgeColor, width: 1),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(color: badgeColor, fontSize: 11, fontWeight: FontWeight.bold),
       ),
     );
   }
 
-  Drawer _buildDrawer(BuildContext ctx) => Drawer(
-    backgroundColor: const Color(0xFF2C2F38),
-    child: ListView(padding: EdgeInsets.zero, children: [
-      DrawerHeader(
-        child: Column(
-          children: [
-            Image.asset('assets/images/login_logo.png', height: 100),
-            const SizedBox(height: 10),
-            Text(
-              '${widget.name} ${widget.lastName} - Transportista',
-              style: const TextStyle(color: Colors.grey, fontSize: 16),
+  // PASO 4: Refactorizar el modal y el constructor de filtros
+  void _showFilterModal() {
+    String? tempType = _filterType;
+    String? tempStatus = _filterStatus;
+    String tempOrder = _sortOrder;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter modalSetState) {
+          return DraggableScrollableSheet(
+            initialChildSize: 0.6,
+            maxChildSize: 0.8,
+            builder: (_, scrollController) => Container(
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(
+                color: _cardColor,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                  ),
+                  const Text('Filtrar y Ordenar', style: TextStyle(color: _textColor, fontSize: 22, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 24),
+                  Expanded(
+                    child: ListView(
+                      controller: scrollController,
+                      children: [
+                        _buildFilterSection('Tipo de Reporte', [null, ..._reportTypes], tempType, (value) => modalSetState(() => tempType = value)),
+                        _buildFilterSection('Estado', [null, ..._statuses], tempStatus, (value) => modalSetState(() => tempStatus = value)),
+                        _buildFilterSection('Ordenar por Fecha', _dateOptions, tempOrder, (value) => modalSetState(() => tempOrder = value!), isExclusive: true),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () {
+                      _filterType = tempType;
+                      _filterStatus = tempStatus;
+                      _sortOrder = tempOrder;
+                      _applyFilters();
+                      Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryColor,
+                      minimumSize: const Size.fromHeight(50),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Aplicar Filtros', style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
-      _drawerItem(Icons.person, 'PERFIL', () {
-        Navigator.push(ctx, MaterialPageRoute(builder: (_) => ProfileScreen2(name: widget.name, lastName: widget.lastName)));
-      }),
-      _drawerItem(Icons.report, 'REPORTES', () {
-        Navigator.push(ctx, MaterialPageRoute(builder: (_) => ReportsCarrierScreen(name: widget.name, lastName: widget.lastName)));
-      }),
-      _drawerItem(Icons.directions_car, 'VEHÍCULOS', () {
-        Navigator.push(ctx, MaterialPageRoute(builder: (_) => VehicleDetailCarrierScreen(name: widget.name, lastName: widget.lastName)));
-      }),
-      _drawerItem(Icons.local_shipping, 'ENVIOS', () {
-        Navigator.push(ctx, MaterialPageRoute(builder: (_) => ShipmentsScreen2(name: widget.name, lastName: widget.lastName)));
-      }),
-      const SizedBox(height: 160),
-      ListTile(
-        leading: const Icon(Icons.logout, color: Colors.white),
-        title: const Text('CERRAR SESIÓN', style: TextStyle(color: Colors.white)),
-        onTap: () {
-          Navigator.pushAndRemoveUntil(
-            ctx,
-            MaterialPageRoute(builder: (_) => LoginScreen(onLoginClicked: (_, __) {}, onRegisterClicked: () {})),
-                (route) => false,
           );
         },
       ),
-    ]),
-  );
+    );
+  }
 
-  Widget _drawerItem(IconData icon, String title, VoidCallback onTap) => ListTile(
-    leading: Icon(icon, color: Colors.white),
-    title: Text(title, style: const TextStyle(color: Colors.white)),
-    onTap: onTap,
-  );
+  Widget _buildFilterSection(String title, List<String?> options, String? selectedValue, ValueChanged<String?> onSelected, {bool isExclusive = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(color: _textMutedColor, fontSize: 16)),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8, runSpacing: 8,
+          children: options.map((option) {
+            final isSelected = selectedValue == option;
+            return ChoiceChip(
+              label: Text(option ?? 'Todos'),
+              selected: isSelected,
+              onSelected: (_) => onSelected(isExclusive ? option : (isSelected ? null : option)),
+              backgroundColor: _backgroundColor,
+              selectedColor: _primaryColor,
+              labelStyle: TextStyle(color: isSelected ? Colors.black : _textMutedColor, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: isSelected ? _primaryColor : Colors.white24),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
 }
