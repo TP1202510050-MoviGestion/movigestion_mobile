@@ -186,6 +186,7 @@ class _AppDrawer2State extends State<AppDrawer2> {
             },
           ),
 
+
           /* ─────────── 2️⃣ NUEVO ITEM CHATBOT ─────────── */
           _drawerItem(
             context,

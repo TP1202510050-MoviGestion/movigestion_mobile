@@ -1,16 +1,18 @@
+// lib/features/vehicle_management/presentation/pages/businessman/reports/report_detail_screen.dart
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_model.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
 
 import '../../../../../../core/widgets/app_drawer.dart';
 
-// TODO: Asegúrate de que la ruta de importación para tu AppDrawer sea correcta.
-// Si creaste la carpeta 'widgets', esta ruta debería funcionar.
-
-// --- THEME CONSTANTS (Idealmente, esto iría en un archivo de tema separado) ---
+/// ---------------------------------------------------------------------------
+/// THEME
+/// ---------------------------------------------------------------------------
 class AppColors {
   static const Color background = Color(0xFF1E1F24);
   static const Color surface = Color(0xFF2C2F38);
@@ -22,13 +24,32 @@ class AppColors {
 }
 
 class AppTextStyles {
-  static const TextStyle heading = TextStyle(color: AppColors.text, fontSize: 24, fontWeight: FontWeight.bold);
-  static const TextStyle subheading = TextStyle(color: AppColors.text, fontSize: 18, fontWeight: FontWeight.w600);
-  static const TextStyle body = TextStyle(color: AppColors.text, fontSize: 16);
-  static const TextStyle bodySecondary = TextStyle(color: AppColors.textSecondary, fontSize: 14);
-}
-// -----------------------------------------------------------------------------
+  static const TextStyle heading = TextStyle(
+    color: AppColors.text,
+    fontSize: 24,
+    fontWeight: FontWeight.bold,
+  );
 
+  static const TextStyle subheading = TextStyle(
+    color: AppColors.text,
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+  );
+
+  static const TextStyle body = TextStyle(
+    color: AppColors.text,
+    fontSize: 16,
+  );
+
+  static const TextStyle bodySecondary = TextStyle(
+    color: AppColors.textSecondary,
+    fontSize: 14,
+  );
+}
+
+/// ---------------------------------------------------------------------------
+/// SCREEN
+/// ---------------------------------------------------------------------------
 
 class ReportDetailScreen extends StatefulWidget {
   final ReportModel report;
@@ -42,13 +63,8 @@ class ReportDetailScreen extends StatefulWidget {
     required this.report,
   }) : super(key: key);
 
-
-
-
-
-
   @override
-  _ReportDetailScreenState createState() => _ReportDetailScreenState();
+  State<ReportDetailScreen> createState() => _ReportDetailScreenState();
 }
 
 class _ReportDetailScreenState extends State<ReportDetailScreen> {
@@ -63,29 +79,28 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   void initState() {
     super.initState();
     _report = widget.report;
-    _markInProgress();
+    _markInProgressIfNeeded();
     _fetchPhone();
   }
 
-  // --- LÓGICA DE NEGOCIO (Preservada del original, con mejoras de seguridad) ---
-  Future<void> _markInProgress() async {
-    if (_report.status != 'En Proceso') {
+  /// Solo mueve el reporte de Pendiente -> En Proceso al abrir el detalle.
+  /// No toca reportes ya Resueltos ni En Proceso.
+  Future<void> _markInProgressIfNeeded() async {
+    if (_report.status == 'Pendiente') {
       final updated = _report.copyWith(status: 'En Proceso');
       final ok = await _reportService.updateReport(updated);
-      if (ok && mounted) setState(() => _report = updated);
+      if (ok && mounted) {
+        setState(() => _report = updated);
+      }
     }
   }
 
   Future<void> _fetchPhone() async {
-    // 1. Verificamos que el nombre del conductor no esté vacío.
-    if (_report.driverName.trim().isEmpty) {
-      return;
-    }
+    if (_report.driverName.trim().isEmpty) return;
 
-    // 2. Usamos el nuevo método del servicio, pasándole el nombre completo directamente.
-    final profile = await _profileService.getProfileByFullName(_report.driverName);
+    final profile =
+    await _profileService.getProfileByFullName(_report.driverName);
 
-    // 3. Actualizamos el estado con el resultado. La lógica aquí no cambia.
     if (mounted) {
       setState(() {
         _phone = profile?.phone ?? '';
@@ -93,7 +108,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     }
   }
 
-  // --- ACCIONES DEL USUARIO CON FEEDBACK Y CONTROL DE ESTADO ---
+  /// Marca como Resuelto y devuelve el reporte actualizado al padre.
   Future<void> _markResolved() async {
     if (_isLoading || _report.status == 'Resuelto') return;
 
@@ -101,21 +116,22 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     try {
       final updated = _report.copyWith(status: 'Resuelto');
       final ok = await _reportService.updateReport(updated);
-      if (ok && mounted) {
-        setState(() => _report = updated);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Reporte marcado como Resuelto'),
-            backgroundColor: AppColors.success,
-          ),
-        );
+
+      if (!mounted) return;
+
+      if (ok) {
+        // Devolvemos el reporte actualizado a ReportsScreen
+        Navigator.pop(context, updated);
       } else {
-        throw Exception('Error al actualizar');
+        throw Exception('Error al actualizar estado');
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al marcar como resuelto'), backgroundColor: AppColors.danger),
+          const SnackBar(
+            content: Text('Error al marcar como resuelto'),
+            backgroundColor: AppColors.danger,
+          ),
         );
       }
     } finally {
@@ -123,41 +139,62 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     }
   }
 
+  /// Elimina el reporte y notifica al padre devolviendo 'deleted'.
   Future<void> _deleteReport() async {
-    final bool? confirmDelete = await showDialog(
+    final bool? confirmDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text('Confirmar Eliminación', style: AppTextStyles.subheading),
-        content: const Text('¿Estás seguro de que quieres eliminar este reporte? Esta acción no se puede deshacer.', style: AppTextStyles.body),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Confirmar Eliminación',
+          style: AppTextStyles.subheading,
+        ),
+        content: const Text(
+          '¿Estás seguro de que quieres eliminar este reporte? '
+              'Esta acción no se puede deshacer.',
+          style: AppTextStyles.body,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar', style: TextStyle(color: AppColors.danger)),
+            child: const Text(
+              'Eliminar',
+              style: TextStyle(color: AppColors.danger),
+            ),
           ),
         ],
       ),
     );
 
-    if (confirmDelete != true) return;
-    if (_isLoading) return;
+    if (confirmDelete != true || _isLoading) return;
 
     setState(() => _isLoading = true);
     try {
       final ok = await _reportService.deleteReport(_report.id!);
-      if (ok && mounted) {
-        Navigator.pop(context, true);
+
+      if (!mounted) return;
+
+      if (ok) {
+        // Avisamos al padre que este reporte fue eliminado
+        Navigator.pop(context, 'deleted');
       } else {
         throw Exception('Error al eliminar');
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al eliminar el reporte'), backgroundColor: AppColors.danger),
+          const SnackBar(
+            content: Text('Error al eliminar el reporte'),
+            backgroundColor: AppColors.danger,
+          ),
         );
       }
     } finally {
@@ -173,13 +210,17 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se puede realizar la llamada')),
+          const SnackBar(
+            content: Text('No se puede realizar la llamada'),
+          ),
         );
       }
     }
   }
 
-  // --- MÉTODO BUILD PRINCIPAL ---
+  /// -------------------------------------------------------------------------
+  /// BUILD
+  /// -------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -192,8 +233,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       drawer: AppDrawer(
         name: widget.name,
         lastName: widget.lastName,
-        companyName: _report.companyName, // Usamos el dato del reporte actual
-        companyRuc: _report.companyRuc,     // Usamos el dato del reporte actual
+        companyName: _report.companyName,
+        companyRuc: _report.companyRuc,
       ),
       body: Stack(
         children: [
@@ -214,7 +255,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                   data: {
                     'Descripción': _report.description,
                     'Ubicación': _report.location,
-                    'Fecha de Creación': '${_report.createdAt.toLocal()}'.split('.')[0],
+                    'Fecha de Creación':
+                    '${_report.createdAt.toLocal()}'.split('.')[0],
                   },
                 ),
                 const SizedBox(height: 16),
@@ -238,7 +280,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             Container(
               color: Colors.black.withOpacity(0.5),
               child: const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
+                child: CircularProgressIndicator(
+                  color: AppColors.primary,
+                ),
               ),
             ),
         ],
@@ -246,7 +290,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     );
   }
 
-  // --- WIDGETS DE UI REFACTORIZADOS ---
+  /// -------------------------------------------------------------------------
+  /// UI HELPERS
+  /// -------------------------------------------------------------------------
+
   Widget _buildReportHeader() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,10 +303,20 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         Align(
           alignment: Alignment.centerLeft,
           child: Chip(
-            label: Text(_report.status, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-            backgroundColor: _report.status == 'Resuelto' ? AppColors.success : AppColors.primary,
+            label: Text(
+              _report.status,
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            backgroundColor: _report.status == 'Resuelto'
+                ? AppColors.success
+                : AppColors.primary,
             avatar: Icon(
-              _report.status == 'Resuelto' ? Icons.check_circle : Icons.hourglass_top,
+              _report.status == 'Resuelto'
+                  ? Icons.check_circle
+                  : Icons.hourglass_top,
               color: Colors.black,
             ),
           ),
@@ -285,7 +342,13 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               return Container(
                 height: 220,
                 color: AppColors.surface,
-                child: const Center(child: Icon(Icons.error_outline, color: AppColors.danger, size: 40)),
+                child: const Center(
+                  child: Icon(
+                    Icons.error_outline,
+                    color: AppColors.danger,
+                    size: 40,
+                  ),
+                ),
               );
             },
           ),
@@ -300,7 +363,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     required Map<String, String> data,
   }) {
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
       color: AppColors.surface,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -314,20 +379,31 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 Text(title, style: AppTextStyles.subheading),
               ],
             ),
-            const Divider(color: Colors.white24, height: 24, thickness: 1),
-            ...data.entries.map((entry) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: _buildInfoRow(title: entry.key, value: entry.value),
-              );
-            }).toList(),
+            const Divider(
+              color: Colors.white24,
+              height: 24,
+              thickness: 1,
+            ),
+            ...data.entries.map(
+                  (entry) => Padding(
+                padding:
+                const EdgeInsets.symmetric(vertical: 8.0),
+                child: _buildInfoRow(
+                  title: entry.key,
+                  value: entry.value,
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInfoRow({required String title, required String value}) {
+  Widget _buildInfoRow({
+    required String title,
+    required String value,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -337,6 +413,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       ],
     );
   }
+
   Widget _buildActionButtons() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -350,29 +427,33 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               backgroundColor: AppColors.success,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-
-        if (_report.status != 'Resuelto') const SizedBox(height: 12),
-
+        if (_report.status != 'Resuelto')
+          const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _isLoading || _phone.isEmpty ? null : _callDriver,
+                onPressed:
+                _isLoading || _phone.isEmpty ? null : _callDriver,
                 icon: const Icon(Icons.phone),
                 label: const Text('Llamar'),
                 style: OutlinedButton.styleFrom(
-                  // CAMBIO CLAVE 1: Usamos un color de alto contraste.
-                  // AppColors.textSecondary (blanco con 70% de opacidad) es perfecto.
-                  // Es muy visible sin ser tan llamativo como el blanco puro.
                   backgroundColor: Colors.amber,
-                  foregroundColor: Colors.amber,
-                  side: const BorderSide(color: Colors.amber), // Borde del mismo color
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  foregroundColor: Colors.black,
+                  side: const BorderSide(color: Colors.amber),
+                  padding:
+                  const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
@@ -383,30 +464,31 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 icon: const Icon(Icons.delete_outline),
                 label: const Text('Eliminar'),
                 style: OutlinedButton.styleFrom(
-                  // CAMBIO CLAVE 2: Mantenemos el color de peligro, que ya tiene
-                  // un contraste aceptable, pero aseguramos que se aplique correctamente.
                   foregroundColor: AppColors.danger,
-                  side: const BorderSide(color: AppColors.danger), // Borde del mismo color
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  side: const BorderSide(color: AppColors.danger),
+                  padding:
+                  const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
           ],
         ),
-
         const SizedBox(height: 24),
         const Divider(color: Colors.white24),
         const SizedBox(height: 8),
         TextButton.icon(
+          onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.arrow_back),
           label: const Text('Volver a Reportes'),
-          onPressed: () => Navigator.pop(context),
           style: TextButton.styleFrom(
             foregroundColor: AppColors.textSecondary,
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding:
+            const EdgeInsets.symmetric(vertical: 12),
           ),
-        )
+        ),
       ],
     );
   }

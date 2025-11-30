@@ -4,6 +4,9 @@ import 'package:movigestion_mobile/features/vehicle_management/data/repository/p
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/register_screen.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/profile/profile_screen.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/carrier/profile/profile_screen2.dart';
+import 'package:connectivity_plus/connectivity_plus.dart'; // <-- AÑADE ESTA IMPORTACIÓN
+
+
 
 class LoginScreen extends StatelessWidget {
   final Function(String, String) onLoginClicked;
@@ -14,6 +17,16 @@ class LoginScreen extends StatelessWidget {
     required this.onLoginClicked,
     required this.onRegisterClicked,
   }) : super(key: key);
+
+  Future<bool> _checkInternetConnection() async {
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult == ConnectivityResult.none) {
+      return false; // No hay conexión
+    }
+    return true; // Hay conexión (WiFi o datos móviles)
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -118,6 +131,12 @@ class LoginScreen extends StatelessWidget {
       ) {
     return ElevatedButton(
       onPressed: () async {
+        // --- PASO 1: VERIFICAR LA CONEXIÓN A INTERNET ---
+        final hasInternet = await _checkInternetConnection();
+        if (!hasInternet) {
+          _showSnackbar(context, 'Falta conexión a internet', Colors.grey);
+          return; // Detiene la ejecución si no hay internet
+        }
         if (usernameController.text.isNotEmpty && passwordController.text.isNotEmpty) {
           try {
             final profile = await profileRepository.login(

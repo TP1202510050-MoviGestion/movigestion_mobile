@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../../../core/app_constants.dart';
 import '../../../../../../core/widgets/app_drawer2.dart';
@@ -119,9 +120,8 @@ class _ProfileScreen2State extends State<ProfileScreen2> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (passC.text.isNotEmpty && passC.text != confirmPassC.text) {
-      _show('Las contraseñas no coinciden', isError: true);
+    if (!_formKey.currentState!.validate()) {
+      _show('Por favor, corrige los errores del formulario.', isError: true);
       return;
     }
     setState(() => _isSaving = true);
@@ -235,6 +235,7 @@ class _ProfileScreen2State extends State<ProfileScreen2> {
   Widget _buildProfileContent() {
     return Form(
       key: _formKey,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 32.0),
         child: Column(
@@ -264,9 +265,41 @@ class _ProfileScreen2State extends State<ProfileScreen2> {
               title: 'Datos Personales',
               icon: Icons.person_outline,
               children: [
-                _field('Nombre', nameC),
-                _field('Apellido', lastNameC),
-                _field('Teléfono', phoneC, kb: TextInputType.phone),
+                _field(
+                  'Nombre',
+                  nameC,
+                  formatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) return 'El nombre es requerido';
+                    if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(val)) return 'Solo se permiten letras';
+                    return null;
+                  },
+                ),
+                _field(
+                  'Apellido',
+                  lastNameC,
+                  formatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) return 'El apellido es requerido';
+                    if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(val)) return 'Solo se permiten letras';
+                    return null;
+                  },
+                ),
+                _field(
+                  'Teléfono',
+                  phoneC,
+                  kb: TextInputType.phone,
+                  formatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(9),
+                  ],
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) return 'El teléfono es requerido';
+                    if (val.length != 9) return 'Debe tener 9 dígitos';
+                    if (!val.startsWith('9')) return 'Debe empezar con 9';
+                    return null;
+                  },
+                ),
               ],
             ),
             if (_editMode)
@@ -274,8 +307,30 @@ class _ProfileScreen2State extends State<ProfileScreen2> {
                 title: 'Seguridad',
                 icon: Icons.lock_outline,
                 children: [
-                  _field('Nueva Contraseña', passC, obs: true, isOptional: true),
-                  _field('Confirmar Contraseña', confirmPassC, obs: true, isOptional: true),
+                  _field(
+                    'Nueva Contraseña',
+                    passC,
+                    obs: true,
+                    // Validador para campo opcional: solo valida si no está vacío
+                    validator: (val) {
+                      if (val != null && val.isNotEmpty && val.length < 6) {
+                        return 'Mínimo 6 caracteres';
+                      }
+                      return null;
+                    },
+                  ),
+                  _field(
+                    'Confirmar Contraseña',
+                    confirmPassC,
+                    obs: true,
+                    validator: (val) {
+                      // Solo valida si se ha escrito algo en la nueva contraseña
+                      if (passC.text.isNotEmpty && val != passC.text) {
+                        return 'Las contraseñas no coinciden';
+                      }
+                      return null;
+                    },
+                  ),
                 ],
               ),
             if (_editMode)
@@ -374,7 +429,15 @@ class _ProfileScreen2State extends State<ProfileScreen2> {
     );
   }
 
-  Widget _field(String label, TextEditingController c, {TextInputType? kb, bool obs = false, bool isOptional = false}) {
+  Widget _field(
+      String label,
+      TextEditingController c, {
+        TextInputType? kb,
+        bool obs = false,
+        // Nuevos parámetros para validación y formateo
+        String? Function(String?)? validator,
+        List<TextInputFormatter>? formatters,
+      }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
@@ -393,11 +456,8 @@ class _ProfileScreen2State extends State<ProfileScreen2> {
           disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(_kRadius), borderSide: BorderSide.none),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
-        validator: (v) {
-          if (isOptional && (v == null || v.trim().isEmpty)) return null;
-          if (v == null || v.trim().isEmpty) return 'Este campo es requerido';
-          return null;
-        },
+        validator: validator,
+        inputFormatters: formatters,
       ),
     );
   }

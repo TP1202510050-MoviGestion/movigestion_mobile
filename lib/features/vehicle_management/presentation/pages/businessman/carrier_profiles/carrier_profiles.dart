@@ -1,5 +1,8 @@
 import 'dart:convert';
+import 'dart:async'; // <--- 1. IMPORTACIÓN NECESARIA
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // <--- 2. IMPORTACIÓN NECESARIA
+
 import 'package:http/http.dart' as http;
 
 // ----- IMPORTACIONES ORIGINALES (MANTENIDAS) -----
@@ -268,61 +271,22 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
 
   /// Diálogo para añadir un nuevo transportista.
   Future<void> _showAddCarrierDialog() async {
-    final nameC = TextEditingController();
-    final lastC = TextEditingController();
-    final emailC = TextEditingController();
-    final phoneC = TextEditingController();
-    final passC = TextEditingController();
-    final formKey = GlobalKey<FormState>();
 
-    await showDialog(
+
+
+    final newCarrierData = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: const Text('Nuevo Conductor', style: TextStyle(color: _primaryColor)),
-        content: SingleChildScrollView(
-          child: Form(
-            key: formKey,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              _buildDialogTextField('Nombre', nameC, icon: Icons.person_outline),
-              _buildDialogTextField('Apellido', lastC, icon: Icons.person_outline),
-              _buildDialogTextField('Email', emailC, icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress),
-              _buildDialogTextField('Teléfono', phoneC, icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
-              _buildDialogTextField('Contraseña', passC, icon: Icons.lock_outline, obscureText: true),
-            ]),
-          ),
-        ),
-        actions: [
-          TextButton(
-            child: const Text('Cancelar', style: TextStyle(color: _textMutedColor)),
-            onPressed: () => Navigator.pop(context),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
-            child: const Text('Registrar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-            onPressed: () async {
-              if ([nameC, lastC, emailC, phoneC, passC].any((c) => c.text.trim().isEmpty)) {
-                _showSnackBar('Por favor, completa todos los campos.');
-                return;
-              }
-              Navigator.pop(context); // Cierra el diálogo antes de la llamada
-              await _registerCarrier({
-                "name": nameC.text.trim(),
-                "lastName": lastC.text.trim(),
-                "email": emailC.text.trim(),
-                "password": passC.text,
-                "phone": phoneC.text.trim(),
-                "companyName": _companyName,
-                "companyRuc": _companyRuc,
-                "type": "Transportista",
-                "profilePhoto": ""
-              });
-            },
-          ),
-        ],
+      builder: (context) => _AddCarrierDialog(
+        companyName: _companyName,
+        companyRuc: _companyRuc,
       ),
     );
+
+    // Si el diálogo devuelve datos, significa que el registro fue exitoso
+    if (newCarrierData != null) {
+      await _registerCarrier(newCarrierData);
+    }
+
   }
 
   /// Campo de texto estilizado para los diálogos.
@@ -445,6 +409,249 @@ class _CarrierProfilesScreenState extends State<CarrierProfilesScreen> {
       ),
     );
   }
+}
 
 
+class _AddCarrierDialog extends StatefulWidget {
+  final String companyName;
+  final String companyRuc;
+
+  const _AddCarrierDialog({
+    required this.companyName,
+    required this.companyRuc,
+  });
+
+  @override
+  _AddCarrierDialogState createState() => _AddCarrierDialogState();
+}
+
+class _AddCarrierDialogState extends State<_AddCarrierDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameC = TextEditingController();
+  final _lastC = TextEditingController();
+  final _emailC = TextEditingController();
+  final _phoneC = TextEditingController();
+  final _passC = TextEditingController();
+
+  // --- Estado para la validación asíncrona ---
+  Timer? _debounce;
+  bool _isCheckingEmail = false;
+  bool _isEmailDuplicate = false;
+  final FocusNode _emailFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _emailC.addListener(_onEmailChanged);
+    _emailFocusNode.addListener(_onEmailFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _emailC.removeListener(_onEmailChanged);
+    _emailFocusNode.removeListener(_onEmailFocusChanged);
+    _emailFocusNode.dispose();
+    _nameC.dispose();
+    _lastC.dispose();
+    _emailC.dispose();
+    _phoneC.dispose();
+    _passC.dispose();
+    super.dispose();
+  }
+
+  // --- Lógica de validación asíncrona ---
+  void _onEmailChanged() {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 700), () {
+      if (_emailC.text.isNotEmpty && mounted && !_emailFocusNode.hasFocus) {
+        _checkEmail(_emailC.text);
+      }
+    });
+  }
+
+  void _onEmailFocusChanged() {
+    if (!_emailFocusNode.hasFocus) {
+      final email = _emailC.text;
+      final isFormatValid = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
+      if (email.isNotEmpty && isFormatValid) {
+        _checkEmail(email);
+      }
+    }
+  }
+
+  Future<void> _checkEmail(String email) async {
+    setState(() {
+      _isCheckingEmail = true;
+      _isEmailDuplicate = false;
+    });
+
+    try {
+      final url = Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}');
+      final response = await http.get(url);
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final List<dynamic> profiles = json.decode(response.body);
+        final normalizedEmail = email.trim().toLowerCase();
+        final bool exists = profiles.any((p) => (p['email'] as String?)?.trim().toLowerCase() == normalizedEmail);
+
+        setState(() => _isEmailDuplicate = exists);
+        if (_isEmailDuplicate) _formKey.currentState?.validate();
+      }
+    } catch (_) {
+      // Ignorar error de red silenciosamente
+    } finally {
+      if (mounted) setState(() => _isCheckingEmail = false);
+    }
+  }
+
+  void _submitForm() {
+    if (_isEmailDuplicate) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('El email ya está registrado.'), backgroundColor: Colors.orangeAccent));
+      return;
+    }
+    if (_formKey.currentState!.validate()) {
+      final newCarrierData = {
+        "name": _nameC.text.trim(),
+        "lastName": _lastC.text.trim(),
+        "email": _emailC.text.trim(),
+        "password": _passC.text,
+        "phone": _phoneC.text.trim(),
+        "companyName": widget.companyName,
+        "companyRuc": widget.companyRuc,
+        "type": "Transportista",
+        "profilePhoto": ""
+      };
+      // Devolvemos los datos a la pantalla anterior
+      Navigator.pop(context, newCarrierData);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF2C2F38),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      title: const Text('Nuevo Conductor', style: TextStyle(color: Color(0xFFEA8E00))),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDialogTextField(
+                  label: 'Nombre',
+                  controller: _nameC,
+                  icon: Icons.person_outline,
+                  formatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Requerido';
+                    if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(v)) return 'Solo letras';
+                    return null;
+                  }
+              ),
+              _buildDialogTextField(
+                  label: 'Apellido',
+                  controller: _lastC,
+                  icon: Icons.person_outline,
+                  formatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Requerido';
+                    if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(v)) return 'Solo letras';
+                    return null;
+                  }
+              ),
+              _buildDialogTextField(
+                  label: 'Email',
+                  controller: _emailC,
+                  icon: Icons.email_outlined,
+                  keyboardType: TextInputType.emailAddress,
+                  focusNode: _emailFocusNode,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Requerido';
+                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(v)) return 'Formato inválido';
+                    if (_isEmailDuplicate) return 'Este email ya existe';
+                    return null;
+                  }
+              ),
+              _buildDialogTextField(
+                  label: 'Teléfono',
+                  controller: _phoneC,
+                  icon: Icons.phone_outlined,
+                  keyboardType: TextInputType.phone,
+                  formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(9)],
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Requerido';
+                    if (v.length != 9) return 'Debe tener 9 dígitos';
+                    if (!v.startsWith('9')) return 'Debe empezar con 9';
+                    return null;
+                  }
+              ),
+              _buildDialogTextField(
+                  label: 'Contraseña',
+                  controller: _passC,
+                  icon: Icons.lock_outline,
+                  obscureText: true,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Requerido';
+                    if (v.length < 6) return 'Mínimo 6 caracteres';
+                    return null;
+                  }
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          child: const Text('Cancelar', style: TextStyle(color: Color(0xFFFFFFFF))),
+          onPressed: () => Navigator.pop(context),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEA8E00)),
+          child: const Text('Registrar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          onPressed: _submitForm,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDialogTextField({
+    required String label,
+    required TextEditingController controller,
+    IconData? icon,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+    String? Function(String?)? validator,
+    List<TextInputFormatter>? formatters,
+    FocusNode? focusNode,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: TextFormField(
+        controller: controller,
+        obscureText: obscureText,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Colors.white),
+        focusNode: focusNode,
+        inputFormatters: formatters,
+        validator: validator,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white70),
+          prefixIcon: icon != null ? Icon(icon, color: Colors.white70, size: 20) : null,
+          filled: true,
+          fillColor: const Color(0xFF1E1F24),
+          contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 12),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFEA8E00))),
+          suffixIcon: (label == 'Email' && _isCheckingEmail)
+              ? const Padding(padding: EdgeInsets.all(12.0), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEA8E00))))
+              : null,
+        ),
+      ),
+    );
+  }
 }

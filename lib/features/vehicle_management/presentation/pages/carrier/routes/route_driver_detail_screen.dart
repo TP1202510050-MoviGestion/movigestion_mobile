@@ -286,7 +286,7 @@ class _RouteDriverDetailScreenState extends State<RouteDriverDetailScreen> {
         buttonText = 'Confirmar Ruta Terminada';
         buttonIcon = Icons.check_rounded;
         break;
-      default: // finalizado, cancelado, etc.
+      default:
         buttonText = 'Ruta Finalizada';
         buttonIcon = Icons.lock_clock_rounded;
         onPressed = null; // Deshabilitar botón
@@ -299,6 +299,10 @@ class _RouteDriverDetailScreenState extends State<RouteDriverDetailScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: _kAction,
           foregroundColor: Colors.black,
+
+          disabledBackgroundColor: const Color(0xFF2F353F), // Un gris oscuro que contraste, como el de las tarjetas
+          disabledForegroundColor: Colors.white38, // Un color de texto claro pero apagado
+
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
         ),

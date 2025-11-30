@@ -256,7 +256,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
             switch(v){case'edit':setState(()=>_editMode=!_editMode);break;case'share':_share();break;case'delete':_confirmDelete();break;}
           },itemBuilder:(_)=>[
             PopupMenuItem(value:'edit',child:Text(_editMode?'Cancelar edición':'Editar')),
-            const PopupMenuItem(value:'share',child:Text('Compartir')),
             const PopupMenuDivider(),
             const PopupMenuItem(value:'delete',textStyle:TextStyle(color:Colors.redAccent),child:Text('Eliminar'))
           ])

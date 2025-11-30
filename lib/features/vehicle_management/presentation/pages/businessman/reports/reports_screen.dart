@@ -1,18 +1,14 @@
+// lib/features/vehicle_management/presentation/pages/businessman/reports/reports_screen.dart
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-// ----- IMPORTACIONES ORIGINALES (MANTENIDAS) -----
 import 'package:movigestion_mobile/core/app_constants.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/profile_service.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_model.dart';
 import 'package:movigestion_mobile/features/vehicle_management/data/remote/report_service.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/carrier_profiles/carrier_profiles.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/profile/profile_screen.dart';
 import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/reports/report_detail_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/shipments/shipments_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/businessman/vehicle/vehicles_screen.dart';
-import 'package:movigestion_mobile/features/vehicle_management/presentation/pages/login_register/login_screen.dart';
 
 import '../../../../../../core/widgets/app_drawer.dart';
 
@@ -39,30 +35,31 @@ class _ReportsScreenState extends State<ReportsScreen>
   static const _textColor = Colors.white;
   static const _textMutedColor = Colors.white70;
 
-  // --- Estado de la UI ---
+  // --- Servicios / Estado base ---
   final ReportService _reportService = ReportService();
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   bool _isLoading = true;
 
-  // --- Estado de Datos ---
+  // --- Datos ---
   List<ReportModel> _allReports = [];
   List<ReportModel> _filteredReports = [];
   String _companyName = '';
   String _companyRuc = '';
 
-  // --- Estado de Filtros ---
+  // --- Filtros ---
   String? _filterType;
   String? _filterStatus;
   String _sortOrder = 'Recientes';
 
-  // Opciones para los filtros
   List<String> get _reportTypes =>
       _allReports.map((r) => r.type).toSet().toList()..sort();
   final List<String> _statuses = ['Pendiente', 'En Proceso', 'Resuelto'];
   final List<String> _dateOptions = ['Recientes', 'Antiguos'];
 
-  // --- Ciclo de Vida ---
+  // ---------------------------------------------------------------------------
+  // Ciclo de vida
+  // ---------------------------------------------------------------------------
   @override
   void initState() {
     super.initState();
@@ -81,33 +78,29 @@ class _ReportsScreenState extends State<ReportsScreen>
     super.dispose();
   }
 
-  // --- Lógica de Datos ---
   Future<void> _bootstrap() async {
     setState(() => _isLoading = true);
     await _fetchManagerData();
     await _fetchReports();
-    if (mounted) {
-      setState(() => _isLoading = false);
-      _animationController.forward();
-    }
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    _animationController.forward();
   }
 
+  // ---------------------------------------------------------------------------
+  // Carga de datos
+  // ---------------------------------------------------------------------------
   Future<void> _fetchManagerData() async {
     try {
       final res = await http
           .get(Uri.parse('${AppConstants.baseUrl}${AppConstants.profile}'));
       if (res.statusCode == 200) {
-        // 1. Tomamos los bytes crudos de la respuesta (sin decodificar).
-        var responseBytes = res.bodyBytes;
-
-        // 2. Decodificamos los bytes forzando el formato UTF-8.
-        var decodedBody = utf8.decode(responseBytes);
-
-        // 3. Ahora usamos el texto ya corregido con json.decode.
+        final decodedBody = utf8.decode(res.bodyBytes);
         final list = json.decode(decodedBody) as List;
         final gerente = list.firstWhere(
               (e) =>
-          e['name'].toString().toLowerCase() == widget.name.toLowerCase() &&
+          e['name'].toString().toLowerCase() ==
+              widget.name.toLowerCase() &&
               e['lastName'].toString().toLowerCase() ==
                   widget.lastName.toLowerCase(),
           orElse: () => null,
@@ -118,7 +111,7 @@ class _ReportsScreenState extends State<ReportsScreen>
         }
       }
     } catch (_) {
-      // Manejo de error silencioso como en el original
+      // Se mantiene silencioso como en la versión original
     }
   }
 
@@ -141,20 +134,27 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   void _applyFilters() {
     var list = List<ReportModel>.from(_allReports);
+
     if (_filterType != null) {
       list = list.where((r) => r.type == _filterType).toList();
     }
     if (_filterStatus != null) {
       list = list.where((r) => r.status == _filterStatus).toList();
     }
+
     list.sort((a, b) {
       final cmp = a.createdAt.compareTo(b.createdAt);
       return _sortOrder == 'Recientes' ? -cmp : cmp;
     });
-    setState(() => _filteredReports = list);
+
+    setState(() {
+      _filteredReports = list;
+    });
   }
 
-  // --- Constructores de UI ---
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -163,8 +163,8 @@ class _ReportsScreenState extends State<ReportsScreen>
       drawer: AppDrawer(
         name: widget.name,
         lastName: widget.lastName,
-        companyName: _companyName, // Usamos la variable de estado de la pantalla
-        companyRuc: _companyRuc,     // Usamos la variable de estado de la pantalla
+        companyName: _companyName,
+        companyRuc: _companyRuc,
       ),
       body: _buildBody(),
     );
@@ -193,8 +193,11 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: _primaryColor));
+      return const Center(
+        child: CircularProgressIndicator(color: _primaryColor),
+      );
     }
+
     if (_filteredReports.isEmpty) {
       return const Center(
         child: Column(
@@ -214,6 +217,7 @@ class _ReportsScreenState extends State<ReportsScreen>
         ),
       );
     }
+
     return FadeTransition(
       opacity: _fadeAnimation,
       child: ListView.builder(
@@ -224,7 +228,9 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
-  /// Construye la tarjeta visual para un reporte individual.
+  // ---------------------------------------------------------------------------
+  // Tarjeta de reporte + manejo de resultado del detalle
+  // ---------------------------------------------------------------------------
   Widget _buildReportCard(ReportModel report) {
     return Card(
       color: _cardColor,
@@ -234,15 +240,45 @@ class _ReportsScreenState extends State<ReportsScreen>
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () async {
-          final changed = await Navigator.push(
+          final result = await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => ReportDetailScreen(
-                  name: widget.name, lastName: widget.lastName, report: report),
+                name: widget.name,
+                lastName: widget.lastName,
+                report: report,
+              ),
             ),
           );
-          if (changed == true) {
-            _fetchReports();
+
+          // 1) Reporte actualizado (por ejemplo, marcado como Resuelto)
+          if (result is ReportModel) {
+            setState(() {
+              final idx =
+              _allReports.indexWhere((r) => r.id == result.id);
+              if (idx != -1) {
+                _allReports[idx] = result;
+              }
+              _applyFilters();
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Reporte actualizado'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+
+          // 2) Reporte eliminado
+          else if (result == 'deleted') {
+            await _fetchReports();
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Reporte eliminado correctamente'),
+                backgroundColor: Colors.green,
+              ),
+            );
           }
         },
         child: Padding(
@@ -253,8 +289,11 @@ class _ReportsScreenState extends State<ReportsScreen>
               CircleAvatar(
                 radius: 24,
                 backgroundColor: _primaryColor.withOpacity(0.15),
-                child: Icon(_getIconForReportType(report.type),
-                    color: _primaryColor, size: 26),
+                child: Icon(
+                  _getIconForReportType(report.type),
+                  color: _primaryColor,
+                  size: 26,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -264,26 +303,35 @@ class _ReportsScreenState extends State<ReportsScreen>
                     Text(
                       report.type,
                       style: const TextStyle(
-                          color: _textColor,
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold),
+                        color: _textColor,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Reportado por: ${report.driverName}',
-                      style: const TextStyle(color: _textMutedColor, fontSize: 13),
+                      style: const TextStyle(
+                        color: _textMutedColor,
+                        fontSize: 13,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(Icons.calendar_today,
-                            size: 12, color: _textMutedColor),
+                        const Icon(
+                          Icons.calendar_today,
+                          size: 12,
+                          color: _textMutedColor,
+                        ),
                         const SizedBox(width: 6),
                         Text(
-                          '${report.createdAt.toLocal()}'.split(' ')[0], // Solo la fecha
-                          style:
-                          const TextStyle(fontSize: 12, color: _textMutedColor),
+                          '${report.createdAt.toLocal()}'.split(' ')[0],
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: _textMutedColor,
+                          ),
                         ),
                       ],
                     ),
@@ -299,7 +347,6 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
-  /// Devuelve un ícono basado en el tipo de reporte.
   IconData _getIconForReportType(String type) {
     switch (type.toLowerCase()) {
       case 'accidente':
@@ -315,7 +362,6 @@ class _ReportsScreenState extends State<ReportsScreen>
     }
   }
 
-  /// Construye una "insignia" de color para el estado del reporte.
   Widget _buildStatusBadge(String status) {
     Color badgeColor;
     switch (status) {
@@ -342,13 +388,17 @@ class _ReportsScreenState extends State<ReportsScreen>
       child: Text(
         status,
         style: TextStyle(
-            color: badgeColor, fontSize: 11, fontWeight: FontWeight.bold),
+          color: badgeColor,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
 
-  /// Muestra el modal de filtros.
-  /// Usa StatefulBuilder para evitar reconstruir toda la pantalla al cambiar filtros.
+  // ---------------------------------------------------------------------------
+  // Filtros
+  // ---------------------------------------------------------------------------
   void _showFilterModal() {
     String? tempType = _filterType;
     String? tempStatus = _filterStatus;
@@ -367,7 +417,9 @@ class _ReportsScreenState extends State<ReportsScreen>
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
                 color: _cardColor,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
               ),
               child: Column(
                 children: [
@@ -376,14 +428,18 @@ class _ReportsScreenState extends State<ReportsScreen>
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 20),
                     decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(2)),
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                  const Text('Filtrar y Ordenar',
-                      style: TextStyle(
-                          color: _textColor,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Filtrar y Ordenar',
+                    style: TextStyle(
+                      color: _textColor,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   Expanded(
                     child: ListView(
@@ -393,19 +449,23 @@ class _ReportsScreenState extends State<ReportsScreen>
                           'Tipo de Reporte',
                           [null, ..._reportTypes],
                           tempType,
-                              (value) => modalSetState(() => tempType = value),
+                              (value) =>
+                              modalSetState(() => tempType = value),
                         ),
                         _buildFilterSection(
                           'Estado',
                           [null, ..._statuses],
                           tempStatus,
-                              (value) => modalSetState(() => tempStatus = value),
+                              (value) =>
+                              modalSetState(() => tempStatus = value),
                         ),
                         _buildFilterSection(
                           'Ordenar por Fecha',
                           _dateOptions,
                           tempOrder,
-                              (value) => modalSetState(() => tempOrder = value!),
+                              (value) => modalSetState(
+                                () => tempOrder = value!,
+                          ),
                           isExclusive: true,
                         ),
                       ],
@@ -424,13 +484,17 @@ class _ReportsScreenState extends State<ReportsScreen>
                       backgroundColor: _primaryColor,
                       minimumSize: const Size.fromHeight(50),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: const Text('Aplicar Filtros',
-                        style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'Aplicar Filtros',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -441,13 +505,23 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
-  Widget _buildFilterSection(String title, List<String?> options,
-      String? selectedValue, ValueChanged<String?> onSelected,
-      {bool isExclusive = false}) {
+  Widget _buildFilterSection(
+      String title,
+      List<String?> options,
+      String? selectedValue,
+      ValueChanged<String?> onSelected, {
+        bool isExclusive = false,
+      }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(color: _textMutedColor, fontSize: 16)),
+        Text(
+          title,
+          style: const TextStyle(
+            color: _textMutedColor,
+            fontSize: 16,
+          ),
+        ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
@@ -457,17 +531,26 @@ class _ReportsScreenState extends State<ReportsScreen>
             return ChoiceChip(
               label: Text(option ?? 'Todos'),
               selected: isSelected,
-              onSelected: (_) => onSelected(isExclusive ? option : (isSelected ? null : option)),
+              onSelected: (_) => onSelected(
+                isExclusive
+                    ? option
+                    : (isSelected ? null : option),
+              ),
               backgroundColor: _backgroundColor,
               selectedColor: _primaryColor,
               labelStyle: TextStyle(
                 color: isSelected ? Colors.black : _textMutedColor,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontWeight: isSelected
+                    ? FontWeight.bold
+                    : FontWeight.normal,
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
                 side: BorderSide(
-                    color: isSelected ? _primaryColor : Colors.white24),
+                  color: isSelected
+                      ? _primaryColor
+                      : Colors.white24,
+                ),
               ),
             );
           }).toList(),
@@ -476,6 +559,4 @@ class _ReportsScreenState extends State<ReportsScreen>
       ],
     );
   }
-
-
 }

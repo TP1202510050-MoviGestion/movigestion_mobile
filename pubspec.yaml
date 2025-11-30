@@ -58,7 +58,7 @@ dependencies:
   dialogflow_grpc: ^0.2.9      # cliente oficial gRPC
   protobuf: ^2.1.0             # versión requerida por dialogflow_grpc
   flutter_markdown: ^0.7.1
-  
+  connectivity_plus: ^5.0.2
 
 
 

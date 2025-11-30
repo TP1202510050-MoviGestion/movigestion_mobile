@@ -194,6 +194,7 @@ class _AppDrawerState extends State<AppDrawer> {
             },
           ),
 
+
           /* ─────────── 2️⃣ NUEVO ITEM CHATBOT ─────────── */
           _drawerItem(
             context,
@@ -216,6 +217,7 @@ class _AppDrawerState extends State<AppDrawer> {
             },
           ),
           /* ──────────────────────────────────────────── */
+
 
 
           const SizedBox(height: 160),
